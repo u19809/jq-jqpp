@@ -1,8 +1,15 @@
+// contains system capabilities
+#include <jq_config.h>
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "jv.h"
+
+#ifdef WIN32
+#define strdup _strdup
+#endif
 
 struct nomem_handler {
     jv_nomem_handler_f handler;

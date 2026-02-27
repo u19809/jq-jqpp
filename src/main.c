@@ -1,14 +1,19 @@
+// contains system capabilities
+#include <jq_config.h>
+
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-#include <libgen.h>
 #ifdef HAVE_SETLOCALE
 #include <locale.h>
 #endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#ifndef WIN32
+#include <libgen.h>
 #include <unistd.h>
+#endif
 
 #ifdef WIN32
 #include <windows.h>
@@ -19,6 +24,34 @@
 #include <wchar.h>
 #include <wtypes.h>
 extern void jv_tsd_dtoa_ctx_init();
+#define fileno _fileno
+
+#include <shlwapi.h>
+
+#define strdup _strdup
+
+// A buffer size for path components on Windows
+#define WIN_PATH_MAX 260 
+
+static char* dirname(char* path) {
+    static char dir[WIN_PATH_MAX];
+    char drive[_MAX_DRIVE];
+    char directory[_MAX_DIR];
+    
+    // Splits "C:/Data/Projects/jq/main.c" into "C:" and "/Data/Projects/jq/"
+    if (_splitpath_s(path, drive, _MAX_DRIVE, directory, _MAX_DIR, NULL, 0, NULL, 0) == 0) {
+        _snprintf_s(dir, WIN_PATH_MAX, _TRUNCATE, "%s%s", drive, directory);
+        
+        // Remove trailing slash to match POSIX dirname behavior
+        size_t len = strlen(dir);
+        if (len > 0 && (dir[len-1] == '/' || dir[len-1] == '\\')) {
+            dir[len-1] = '\0';
+        }
+        return dir;
+    }
+    return ".";
+}
+
 #endif
 
 #ifdef HAVE_LIBONIG
@@ -37,8 +70,10 @@ extern void jv_tsd_dtoa_ctx_init();
 #include "jv.h"
 #include "jq.h"
 #include "util.h"
-#include "src/version.h"
-#include "src/config_opts.inc"
+#include <version.h>
+#ifndef NOCONFIG
+#include <config_opts.inc>
+#endif
 
 int jq_testsuite(jv lib_dirs, int verbose, int argc, char* argv[]);
 
@@ -172,8 +207,8 @@ enum {
 #define jq_exit_with_status(r)  exit(abs(r))
 #define jq_exit(r)              exit( r > 0 ? r : 0 )
 
-static int process(jq_state *jq, jv value, int flags, int dumpopts, int options) {
-  int ret = JQ_OK_NO_OUTPUT; // No valid results && -e -> exit(4)
+static ArraySize_t process(jq_state *jq, jv value, int flags, int dumpopts, int options) {
+  ArraySize_t ret = JQ_OK_NO_OUTPUT; // No valid results && -e -> exit(4)
   jq_start(jq, value, flags);
   jv result;
   while (jv_is_valid(result = jq_next(jq))) {
@@ -213,7 +248,7 @@ static int process(jq_state *jq, jv value, int flags, int dumpopts, int options)
     if (!jv_is_valid(exit_code))
       ret = JQ_OK;
     else if (jv_get_kind(exit_code) == JV_KIND_NUMBER)
-      ret = jv_number_value(exit_code);
+      ret = (ArraySize_t)jv_number_value(exit_code);
     else
       ret = JQ_ERROR_UNKNOWN;
     jv_free(exit_code);
@@ -247,7 +282,7 @@ static int process(jq_state *jq, jv value, int flags, int dumpopts, int options)
     jv_free(msg);
   }
   jv_free(result);
-  return ret;
+  return (ArraySize_t)ret;
 }
 
 static void debug_cb(void *data, jv input) {
@@ -279,7 +314,7 @@ int wmain(int argc, wchar_t* wargv[]) {
                                                    0,
                                                    wargv[i],
                                                    -1, 0, 0, 0, 0)));
-    WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, argv[i], arg_sz, 0, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, argv[i], (int)arg_sz, 0, 0);
   }
   return umain(argc, argv);
 }
@@ -320,8 +355,9 @@ int main(int argc, char* argv[]) {
   jv_tsd_dtoa_ctx_init();
   fflush(stdout);
   fflush(stderr);
-  _setmode(fileno(stdout), _O_TEXT | _O_U8TEXT);
-  _setmode(fileno(stderr), _O_TEXT | _O_U8TEXT);
+// U8TEXT requires all fprintfs to become fwprintf
+  _setmode(fileno(stdout), _O_TEXT/* | _O_U8TEXT*/);
+  _setmode(fileno(stderr), _O_TEXT /*| _O_U8TEXT*/);
 #endif
 
   jv ARGS = jv_array(); /* positional arguments */
@@ -513,7 +549,11 @@ int main(int argc, char* argv[]) {
           ret = JQ_OK;
           goto out;
         } else if (isoption(&text, 0, "build-configuration", is_short)) {
+#ifdef NOCONFIG
+          printf("NO_CONFIG\n" );
+#else
           printf("%s\n", JQ_CONFIG);
+#endif
           ret = JQ_OK;
           goto out;
         } else if (isoption(&text, 0, "run-tests", is_short)) {
@@ -615,10 +655,12 @@ int main(int argc, char* argv[]) {
     ARGS = JV_OBJECT(jv_string("positional"), ARGS,
                      jv_string("named"), jv_copy(program_arguments));
     program_arguments = jv_object_set(program_arguments, jv_string("ARGS"), jv_copy(ARGS));
+#ifndef NOCONFIG
     if (!jv_object_has(jv_copy(program_arguments), jv_string("JQ_BUILD_CONFIGURATION")))
       program_arguments = jv_object_set(program_arguments,
                                         jv_string("JQ_BUILD_CONFIGURATION"),
                                         jv_string(JQ_CONFIG)); /* named arguments */
+#endif
     compiled = jq_compile_args(jq, jv_string_value(data), jv_copy(program_arguments));
     free(program_origin);
     jv_free(data);
@@ -627,10 +669,12 @@ int main(int argc, char* argv[]) {
     ARGS = JV_OBJECT(jv_string("positional"), ARGS,
                      jv_string("named"), jv_copy(program_arguments));
     program_arguments = jv_object_set(program_arguments, jv_string("ARGS"), jv_copy(ARGS));
+#ifndef NOCONFIG
     if (!jv_object_has(jv_copy(program_arguments), jv_string("JQ_BUILD_CONFIGURATION")))
       program_arguments = jv_object_set(program_arguments,
                                         jv_string("JQ_BUILD_CONFIGURATION"),
                                         jv_string(JQ_CONFIG)); /* named arguments */
+#endif
     compiled = jq_compile_args(jq, program, jv_copy(program_arguments));
   }
   if (!compiled){

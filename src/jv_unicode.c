@@ -8,13 +8,13 @@
 // If the last codepoint is incomplete, returns the number of missing bytes via
 // *missing_bytes.  If there are no leading bytes or an invalid byte is
 // encountered, NULL is returned and *missing_bytes is not altered.
-const char* jvp_utf8_backtrack(const char* start, const char* min, int *missing_bytes) {
+const char* jvp_utf8_backtrack(const char* start, const char* min, intptr_t *missing_bytes) {
   assert(min <= start);
   if (min == start) {
     return min;
   }
-  int length = 0;
-  int seen = 1;
+  intptr_t length = 0;
+  intptr_t seen = 1;
   while (start >= min && (length = utf8_coding_length[(unsigned char)*start]) == UTF8_CONTINUATION_BYTE) {
     start--;
     seen++;
@@ -33,7 +33,7 @@ const char* jvp_utf8_next(const char* in, const char* end, int* codepoint_ret) {
   }
   int codepoint = -1;
   unsigned char first = (unsigned char)in[0];
-  int length = utf8_coding_length[first];
+  intptr_t length = utf8_coding_length[first];
   if ((first & 0x80) == 0) {
     /* Fast-path for ASCII */
     codepoint = first;
@@ -97,26 +97,27 @@ int jvp_utf8_encode_length(int codepoint) {
   else return 4;
 }
 
-int jvp_utf8_encode(int codepoint, char* out) {
-  assert(codepoint >= 0 && codepoint <= 0x10FFFF);
-  char* start = out;
-  if (codepoint <= 0x7F) {
-    *out++ = codepoint;
-  } else if (codepoint <= 0x7FF) {
-    *out++ = 0xC0 + ((codepoint & 0x7C0) >> 6);
-    *out++ = 0x80 + ((codepoint & 0x03F));
-  } else if(codepoint <= 0xFFFF) {
-    *out++ = 0xE0 + ((codepoint & 0xF000) >> 12);
-    *out++ = 0x80 + ((codepoint & 0x0FC0) >> 6);
-    *out++ = 0x80 + ((codepoint & 0x003F));
-  } else {
-    *out++ = 0xF0 + ((codepoint & 0x1C0000) >> 18);
-    *out++ = 0x80 + ((codepoint & 0x03F000) >> 12);
-    *out++ = 0x80 + ((codepoint & 0x000FC0) >> 6);
-    *out++ = 0x80 + ((codepoint & 0x00003F));
-  }
-  assert(out - start == jvp_utf8_encode_length(codepoint));
-  return out - start;
+intptr_t jvp_utf8_encode(int codepoint, char *out)
+{
+    assert(codepoint >= 0 && codepoint <= 0x10FFFF);
+    char *start = out;
+    if (codepoint <= 0x7F) {
+        *out++ = codepoint;
+    } else if (codepoint <= 0x7FF) {
+        *out++ = 0xC0 + ((codepoint & 0x7C0) >> 6);
+        *out++ = 0x80 + ((codepoint & 0x03F));
+    } else if (codepoint <= 0xFFFF) {
+        *out++ = 0xE0 + ((codepoint & 0xF000) >> 12);
+        *out++ = 0x80 + ((codepoint & 0x0FC0) >> 6);
+        *out++ = 0x80 + ((codepoint & 0x003F));
+    } else {
+        *out++ = 0xF0 + ((codepoint & 0x1C0000) >> 18);
+        *out++ = 0x80 + ((codepoint & 0x03F000) >> 12);
+        *out++ = 0x80 + ((codepoint & 0x000FC0) >> 6);
+        *out++ = 0x80 + ((codepoint & 0x00003F));
+    }
+    assert((intptr_t)(out - start) == jvp_utf8_encode_length(codepoint));
+    return (intptr_t)(out - start);
 }
 
 // characters with White_Space property in:

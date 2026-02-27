@@ -1,6 +1,5 @@
 #ifndef COMPILE_H
 #define COMPILE_H
-#include <stdint.h>
 #include "jv.h"
 #include "bytecode.h"
 #include "locfile.h"

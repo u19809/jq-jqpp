@@ -1,3 +1,6 @@
+// contains system capabilities
+#include <jq_config.h>
+
 #if __SIZEOF_POINTER__==4
 # define _TIME_BITS 64
 #endif
@@ -11,7 +14,9 @@
 #ifdef __OpenBSD__
 # define _BSD_SOURCE
 #endif
+#ifndef WIN32
 #include <sys/time.h>
+#endif
 #include <stdlib.h>
 #include <stddef.h>
 #include <assert.h>
@@ -29,6 +34,7 @@
 #include "builtin.h"
 #include "compile.h"
 #include "jq_parser.h"
+
 #include "bytecode.h"
 #include "linker.h"
 #include "locfile.h"
@@ -38,7 +44,6 @@
 #include "jv_dtoa_tsd.h"
 #include "jv_private.h"
 #include "util.h"
-
 
 #define BINOP(name) \
 static jv f_ ## name(jq_state *jq, jv input, jv a, jv b) { \
@@ -254,8 +259,8 @@ static jv f_negate(jq_state *jq, jv input) {
 static jv f_startswith(jq_state *jq, jv a, jv b) {
   if (jv_get_kind(a) != JV_KIND_STRING || jv_get_kind(b) != JV_KIND_STRING)
     return ret_error2(a, b, jv_string("startswith() requires string inputs"));
-  int alen = jv_string_length_bytes(jv_copy(a));
-  int blen = jv_string_length_bytes(jv_copy(b));
+  ArraySize_t alen = jv_string_length_bytes(jv_copy(a));
+  ArraySize_t blen = jv_string_length_bytes(jv_copy(b));
   jv ret;
 
   if (blen <= alen && memcmp(jv_string_value(a), jv_string_value(b), blen) == 0)
@@ -272,8 +277,8 @@ static jv f_endswith(jq_state *jq, jv a, jv b) {
     return ret_error2(a, b, jv_string("endswith() requires string inputs"));
   const char *astr = jv_string_value(a);
   const char *bstr = jv_string_value(b);
-  size_t alen = jv_string_length_bytes(jv_copy(a));
-  size_t blen = jv_string_length_bytes(jv_copy(b));
+  ArraySize_t alen = jv_string_length_bytes(jv_copy(a));
+  ArraySize_t blen = jv_string_length_bytes(jv_copy(b));
   jv ret;
 
   if (alen < blen ||
@@ -370,7 +375,7 @@ jv binop_mod(jv a, jv b) {
     if (bi == 0)
       return type_error2(a, b, "cannot be divided (remainder) because the divisor is zero");
     // Check if the divisor is -1 to avoid overflow when the dividend is INTMAX_MIN.
-    jv r = jv_number(bi == -1 ? 0 : dtoi(na) % bi);
+    jv r = jv_number((double)(bi == -1 ? 0 : dtoi(na) % bi));
     jv_free(a);
     jv_free(b);
     return r;
@@ -484,18 +489,18 @@ static jv f_toboolean(jq_state *jq, jv input) {
 
 static jv f_length(jq_state *jq, jv input) {
   if (jv_get_kind(input) == JV_KIND_ARRAY) {
-    return jv_number(jv_array_length(input));
+    return jv_number_i(jv_array_length(input));
   } else if (jv_get_kind(input) == JV_KIND_OBJECT) {
-    return jv_number(jv_object_length(input));
+    return jv_number_i(jv_object_length(input));
   } else if (jv_get_kind(input) == JV_KIND_STRING) {
-    return jv_number(jv_string_length_codepoints(input));
+    return jv_number_i(jv_string_length_codepoints(input));
   } else if (jv_get_kind(input) == JV_KIND_NUMBER) {
     jv r = jv_number_abs(input);
     jv_free(input);
     return r;
   } else if (jv_get_kind(input) == JV_KIND_NULL) {
     jv_free(input);
-    return jv_number(0);
+    return jv_number_i(0);
   } else {
     return type_error(input, "has no length");
   }
@@ -512,7 +517,7 @@ static jv f_tostring(jq_state *jq, jv input) {
 static jv f_utf8bytelength(jq_state *jq, jv input) {
   if (jv_get_kind(input) != JV_KIND_STRING)
     return type_error(input, "only strings have UTF-8 byte length");
-  return jv_number(jv_string_length_bytes(input));
+  return jv_number_i(jv_string_length_bytes(input));
 }
 
 #define CHARS_ALPHANUM "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -730,10 +735,10 @@ static jv f_format(jq_state *jq, jv input, jv fmt) {
     input = f_tostring(jq, input);
     jv line = jv_string("");
     const unsigned char* data = (const unsigned char*)jv_string_value(input);
-    int len = jv_string_length_bytes(jv_copy(input));
-    for (int i=0; i<len; i+=3) {
+    ArraySize_t len = jv_string_length_bytes(jv_copy(input));
+    for (ArraySize_t i=0; i<len; i+=3) {
       uint32_t code = 0;
-      int n = len - i >= 3 ? 3 : len-i;
+      ArraySize_t n = len - i >= 3 ? 3 : len-i;
       for (int j=0; j<3; j++) {
         code <<= 8;
         code |= j < n ? (unsigned)data[i+j] : 0;
@@ -752,13 +757,13 @@ static jv f_format(jq_state *jq, jv input, jv fmt) {
     jv_free(fmt);
     input = f_tostring(jq, input);
     const unsigned char* data = (const unsigned char*)jv_string_value(input);
-    int len = jv_string_length_bytes(jv_copy(input));
-    size_t decoded_len = MAX((3 * (size_t)len) / 4, (size_t)1); // 3 usable bytes for every 4 bytes of input
+    ArraySize_t len = jv_string_length_bytes(jv_copy(input));
+    ArraySize_t decoded_len = MAX((3 * len) / 4, (size_t)1); // 3 usable bytes for every 4 bytes of input
     char *result = jv_mem_calloc(decoded_len, sizeof(char));
     uint32_t ri = 0;
     int input_bytes_read=0;
     uint32_t code = 0;
-    for (int i=0; i<len && data[i] != '='; i++) {
+    for (ArraySize_t i=0; i<len && data[i] != '='; i++) {
       if (BASE64_DECODE_TABLE[data[i]] == BASE64_INVALID_ENTRY) {
         free(result);
         return type_error(input, "is not valid base64 data");
@@ -841,14 +846,14 @@ static jv f_bsearch(jq_state *jq, jv input, jv target) {
     jv_free(target);
     return type_error(input, "cannot be searched from");
   }
-  int start = 0;
-  int end = jv_array_length(jv_copy(input));
+  ArraySize_t start = 0;
+  ArraySize_t end = jv_array_length(jv_copy(input));
   jv answer = jv_invalid();
   while (start < end) {
-    int mid = start + (end - start) / 2;
+    ArraySize_t mid = start + (end - start) / 2;
     int result = jv_cmp(jv_copy(target), jv_array_get(jv_copy(input), mid));
     if (result == 0) {
-      answer = jv_number(mid);
+      answer = jv_number_i(mid);
       break;
     } else if (result < 0) {
       end = mid;
@@ -857,7 +862,7 @@ static jv f_bsearch(jq_state *jq, jv input, jv target) {
     }
   }
   if (!jv_is_valid(answer)) {
-    answer = jv_number(-1 - start);
+    answer = jv_number_i(-1 - start);
   }
   jv_free(input);
   jv_free(target);
@@ -992,7 +997,7 @@ static jv f_match(jq_state *jq, jv input, jv regex, jv modifiers, jv testmode) {
   result = test ? jv_false() : jv_array();
   const char *input_string = jv_string_value(input);
   const UChar* start = (const UChar*)jv_string_value(input);
-  const unsigned long length = jv_string_length_bytes(jv_copy(input));
+  const ArraySize_t length = jv_string_length_bytes(jv_copy(input));
   const UChar* end = start + length;
   region = onig_region_new();
   do {
@@ -1301,7 +1306,7 @@ static jv string_trim(jv a, int op) {
     return ret_error(a, jv_string("trim input must be a string"));
   }
 
-  int len = jv_string_length_bytes(jv_copy(a));
+  ArraySize_t len = jv_string_length_bytes(jv_copy(a));
   const char *start = jv_string_value(a);
   const char *trim_start = start;
   const char *end = trim_start + len;
@@ -1348,10 +1353,10 @@ static jv f_string_implode(jq_state *jq, jv a) {
     return ret_error(a, jv_string("implode input must be an array"));
   }
 
-  int len = jv_array_length(jv_copy(a));
+  ArraySize_t len = jv_array_length(jv_copy(a));
   jv s = jv_string_empty(len);
 
-  for (int i = 0; i < len; i++) {
+  for (ArraySize_t i = 0; i < len; i++) {
     jv n = jv_array_get(jv_copy(a), i);
     if (jv_get_kind(n) != JV_KIND_NUMBER || jvp_number_is_nan(n)) {
       jv_free(a);
@@ -1359,7 +1364,7 @@ static jv f_string_implode(jq_state *jq, jv a) {
       return type_error(n, "can't be imploded, unicode codepoint needs to be numeric");
     }
 
-    int nv = jv_number_value(n);
+    int nv = (int)jv_number_value(n);
     jv_free(n);
     // outside codepoint range or in utf16 surrogate pair range
     if (nv < 0 || nv > 0x10FFFF || (nv >= 0xD800 && nv <= 0xDFFF))
@@ -1629,7 +1634,7 @@ static int jv2tm(jv a, struct tm *tm, int localtime) {
     double d = jv_number_value(n);
     if (i == 0) /* year */
       d -= 1900;
-    *(int *)((void *)tm + offsets[i]) = d < INT_MIN ? INT_MIN :
+    *(int *)((char *)tm + offsets[i]) = d < INT_MIN ? INT_MIN :
                                         d > INT_MAX ? INT_MAX : (int)d;
     jv_free(n);
   }
@@ -1671,7 +1676,7 @@ static jv f_mktime(jq_state *jq, jv a) {
     return jv_invalid_with_msg(jv_string("invalid gmtime representation"));
   if (t == (time_t)-2)
     return jv_invalid_with_msg(jv_string("mktime not supported on this platform"));
-  return jv_number(t);
+  return jv_number_i(t);
 }
 
 #ifdef HAVE_GMTIME_R
@@ -1849,7 +1854,7 @@ static jv f_now(jq_state *jq, jv a) {
 #else
 static jv f_now(jq_state *jq, jv a) {
   jv_free(a);
-  return jv_number(time(NULL));
+  return jv_number_i(time(NULL));
 }
 #endif
 
@@ -2048,7 +2053,7 @@ static block bind_bytecoded_builtins(block b) {
 
 static const char jq_builtins[] = {
 /* Include jq-coded builtins */
-#include "src/builtin.inc"
+#include <builtin.inc>
   '\0',
 };
 

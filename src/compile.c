@@ -1,7 +1,12 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#define strdup _strdup
+// #define strcpy strcpy_s
+#endif
 #include "compile.h"
 #include "bytecode.h"
 #include "locfile.h"
@@ -371,7 +376,7 @@ static block block_bind(block binder, block body, int bindflags) {
 
 block block_bind_library(block binder, block body, int bindflags, const char *libname) {
   bindflags |= OP_HAS_BINDING;
-  int matchlen = (libname == NULL) ? 0 : strlen(libname);
+  size_t matchlen = (libname == NULL) ? 0 : strlen(libname);
   char *matchname = jv_mem_alloc(matchlen+2+1);
   matchname[0] = '\0';
   if (libname != NULL && libname[0] != '\0') {
@@ -1331,14 +1336,14 @@ static int compile(struct bytecode* bc, block b, struct locfile* lf, jv args, jv
       }
     } else if ((op->flags & OP_HAS_CONSTANT) && (op->flags & OP_HAS_VARIABLE)) {
       // STORE_GLOBAL: constant global, basically
-      code[pos++] = jv_array_length(jv_copy(constant_pool));
+      code[pos++] = (uint16_t)jv_array_length(jv_copy(constant_pool));
       constant_pool = jv_array_append(constant_pool, jv_copy(curr->imm.constant));
       code[pos++] = nesting_level(bc, curr->bound_by);
       uint16_t var = (uint16_t)curr->bound_by->imm.intval;
       code[pos++] = var;
       if (var > maxvar) maxvar = var;
     } else if (op->flags & OP_HAS_CONSTANT) {
-      code[pos++] = jv_array_length(jv_copy(constant_pool));
+      code[pos++] = (uint16_t)jv_array_length(jv_copy(constant_pool));
       constant_pool = jv_array_append(constant_pool, jv_copy(curr->imm.constant));
     } else if (op->flags & OP_HAS_VARIABLE) {
       code[pos++] = nesting_level(bc, curr->bound_by);

@@ -32,9 +32,17 @@ jv jq_realpath(jv);
 
 static void priv_fwrite(const char *s, size_t len, FILE *fout, int is_tty) {
 #ifdef WIN32
-  if (is_tty)
-    WriteFile((HANDLE)_get_osfhandle(fileno(fout)), s, len, NULL, NULL);
-  else
+  if (is_tty) {
+	HANDLE h = (HANDLE)_get_osfhandle(_fileno(fout));
+	while (len > 0) {
+            // Cap each "trip" at 2GB (0x7FFFFFFF) to stay safe within DWORD limits
+            DWORD to_write = (len > 0x7FFFFFFF) ? 0x7FFFFFFF : (DWORD)len;
+            DWORD written;
+            if (!WriteFile(h, s, to_write, &written, NULL)) break;
+            s += written;
+            len -= written;
+        }
+  } else
     fwrite(s, 1, len, fout);
 #else
   fwrite(s, 1, len, fout);
@@ -44,6 +52,15 @@ static void priv_fwrite(const char *s, size_t len, FILE *fout, int is_tty) {
 const void *_jq_memmem(const void *haystack, size_t haystacklen,
                        const void *needle, size_t needlelen);
 
+#ifdef WIN32
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+
+#ifndef MAX
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+#else
 #ifndef MIN
 #define MIN(a,b) \
   ({ __typeof__ (a) _a = (a); \
@@ -55,6 +72,7 @@ const void *_jq_memmem(const void *haystack, size_t haystacklen,
   ({ __typeof__ (a) _a = (a); \
    __typeof__ (b) _b = (b); \
    _a > _b ? _a : _b; })
+#endif
 #endif
 
 #include <time.h>

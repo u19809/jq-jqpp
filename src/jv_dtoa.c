@@ -199,8 +199,6 @@
 #define MALLOC jv_mem_alloc
 #define FREE jv_mem_free
 
-
-
 #ifndef Long
 #define Long long
 #endif
@@ -633,7 +631,7 @@ multadd
 			Bfree(C, b);
 			b = b1;
 			}
-		b->x[wds++] = carry;
+		b->x[wds++] = (ULong)carry;
 		b->wds = wds;
 		}
 	return b;
@@ -807,7 +805,7 @@ mult
 				*xc++ = z & FFFFFFFF;
 				}
 				while(x < xae);
-			*xc = carry;
+			*xc = (ULong)carry;
 			}
 		}
 #else
@@ -2409,7 +2407,7 @@ jvp_strtod
 		else if (nd < 16)
 			z = 10*z + c - '0';
 	nd0 = nd;
-	bc.dp0 = bc.dp1 = s - s0;
+	bc.dp0 = bc.dp1 = (int)(s - s0);
 	for(s1 = s; s1 > s0 && *--s1 == '0'; )
 		++nz1;
 #ifdef USE_LOCALE
@@ -2433,13 +2431,13 @@ jvp_strtod
 #endif
 	if (c == '.') {
 		c = *++s;
-		bc.dp1 = s - s0;
+		bc.dp1 = (int)(s - s0);
 		bc.dplen = bc.dp1 - bc.dp0;
 		if (!nd) {
 			for(; c == '0'; c = *++s)
 				nz++;
 			if (c > '0' && c <= '9') {
-				bc.dp0 = s0 - s;
+				bc.dp0 = (int)(s0 - s);
 				bc.dp1 = bc.dp0 + bc.dplen;
 				s0 = s;
 				nf += nz;
@@ -3233,7 +3231,7 @@ jvp_strtod
 #ifdef Avoid_Underflow
 			if (bc.scale && y <= 2*P*Exp_msk1) {
 				if (aadj <= 0x7fffffff) {
-					if ((z = aadj) <= 0)
+					if ((z = (ULong)aadj) <= 0)
 						z = 1;
 					aadj = z;
 					aadj1 = bc.dsign ? aadj : -aadj;
@@ -3794,7 +3792,7 @@ jvp_dtoa
 				}
 #endif
 			for(i = 0;;) {
-				L = dval(&u);
+				L = (int)dval(&u);
 				dval(&u) -= L;
 				*s++ = '0' + (int)L;
 				if (1. - dval(&u) < dval(&eps))

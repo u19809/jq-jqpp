@@ -32,8 +32,8 @@ enum last_seen {
 
 struct jv_parser {
   const char* curr_buf;
-  int curr_buf_length;
-  int curr_buf_pos;
+  ArraySize_t curr_buf_length;
+  ArraySize_t curr_buf_pos;
   int curr_buf_is_partial;
   int eof;
   unsigned bom_strip_position;
@@ -308,13 +308,13 @@ static pfunc stream_token(struct jv_parser* p, char ch) {
     last = jv_array_get(jv_copy(p->path), p->stacklen - 1);
     k = jv_get_kind(last);
     if (k == JV_KIND_NUMBER) {
-      int idx = jv_number_value(last);
+      ArraySize_t idx = (ArraySize_t)jv_number_value(last);
 
       if (jv_is_valid(p->next)) {
         p->output = JV_ARRAY(jv_copy(p->path), p->next);
         p->next = jv_invalid();
       }
-      p->path = jv_array_set(p->path, p->stacklen - 1, jv_number(idx + 1));
+      p->path = jv_array_set(p->path, p->stacklen - 1, jv_number_i(idx + 1));
       p->last_seen = JV_LAST_COMMA;
     } else if (k == JV_KIND_STRING) {
       if (jv_is_valid(p->next)) {
@@ -721,35 +721,36 @@ void jv_parser_free(struct jv_parser* p) {
 
 static const unsigned char UTF8_BOM[] = {0xEF,0xBB,0xBF};
 
-int jv_parser_remaining(struct jv_parser* p) {
+ArraySize_t jv_parser_remaining(struct jv_parser* p) {
   if (p->curr_buf == 0)
     return 0;
-  return (p->curr_buf_length - p->curr_buf_pos);
+  return (ArraySize_t)(p->curr_buf_length - p->curr_buf_pos);
 }
 
-void jv_parser_set_buf(struct jv_parser* p, const char* buf, int length, int is_partial) {
-  assert((p->curr_buf == 0 || p->curr_buf_pos == p->curr_buf_length)
-         && "previous buffer not exhausted");
-  while (length > 0 && p->bom_strip_position < sizeof(UTF8_BOM)) {
-    if ((unsigned char)*buf == UTF8_BOM[p->bom_strip_position]) {
-      // matched a BOM character
-      buf++;
-      length--;
-      p->bom_strip_position++;
-    } else {
-      if (p->bom_strip_position == 0) {
-        // no BOM in this document
-        p->bom_strip_position = sizeof(UTF8_BOM);
-      } else {
-        // malformed BOM (prefix present, rest missing)
-        p->bom_strip_position = 0xff;
-      }
+void jv_parser_set_buf(struct jv_parser *p, const char *buf, ArraySize_t length, int is_partial)
+{
+    assert((p->curr_buf == 0 || p->curr_buf_pos == p->curr_buf_length)
+           && "previous buffer not exhausted");
+    while (length > 0 && p->bom_strip_position < sizeof(UTF8_BOM)) {
+        if ((unsigned char) *buf == UTF8_BOM[p->bom_strip_position]) {
+            // matched a BOM character
+            buf++;
+            length--;
+            p->bom_strip_position++;
+        } else {
+            if (p->bom_strip_position == 0) {
+                // no BOM in this document
+                p->bom_strip_position = sizeof(UTF8_BOM);
+            } else {
+                // malformed BOM (prefix present, rest missing)
+                p->bom_strip_position = 0xff;
+            }
+        }
     }
-  }
-  p->curr_buf = buf;
-  p->curr_buf_length = length;
-  p->curr_buf_pos = 0;
-  p->curr_buf_is_partial = is_partial;
+    p->curr_buf = buf;
+    p->curr_buf_length = length;
+    p->curr_buf_pos = 0;
+    p->curr_buf_is_partial = is_partial;
 }
 
 static jv make_error(struct jv_parser*, const char *, ...) JV_PRINTF_LIKE(2, 3);
@@ -861,7 +862,7 @@ jv jv_parser_next(struct jv_parser* p) {
   }
 }
 
-jv jv_parse_sized_custom_flags(const char* string, int length, int flags) {
+jv jv_parse_sized_custom_flags(const char* string, ArraySize_t length, int flags) {
   struct jv_parser parser;
   parser_init(&parser, flags);
   jv_parser_set_buf(&parser, string, length, 0);
@@ -900,7 +901,7 @@ jv jv_parse_sized_custom_flags(const char* string, int length, int flags) {
   return value;
 }
 
-jv jv_parse_sized(const char* string, int length) {
+jv jv_parse_sized(const char* string, ArraySize_t length) {
   return jv_parse_sized_custom_flags(string, length, 0);
 }
 

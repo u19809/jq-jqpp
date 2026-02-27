@@ -5,7 +5,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#include <sys/stat.h>
+#include <io.h>
+#include <fcntl.h>
+
+// #define strerror strerror_s
+
+// If S_ISDIR isn't defined, we define it using the Windows-equivalent bitmask
+#ifndef S_ISDIR
+#define S_ISDIR(mode) (((mode) & _S_IFMT) == _S_IFDIR)
+#endif
+
+#ifndef S_ISREG
+#define S_ISREG(mode) (((mode) & _S_IFMT) == _S_IFREG)
+#endif
+
+#define open _open
+#define read  _read
+#define write _write
+#define close _close
+#define lseek _lseek
+
+#endif
+
 #include "jv.h"
 #include "jv_unicode.h"
 
@@ -49,7 +74,7 @@ jv jv_load_file(const char* filename, int raw) {
       continue;
 
     char *end = buf + n;
-    int len = 0;
+    size_t len = 0;
     if (jvp_utf8_backtrack(end - 1, buf, &len) && len > 0 &&
         !feof(file) && !ferror(file)) {
       n += fread(end, 1, len, file);

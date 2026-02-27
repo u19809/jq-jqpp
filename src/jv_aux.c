@@ -16,7 +16,7 @@ static double jv_number_get_value_and_consume(jv number) {
   return value;
 }
 
-static jv parse_slice(jv j, jv slice, int* pstart, int* pend) {
+static jv parse_slice(jv j, jv slice, ArraySize_t* pstart, ArraySize_t* pend) {
   // Array slices
   jv start_jv = jv_object_get(jv_copy(slice), jv_string("start"));
   jv end_jv = jv_object_get(slice, jv_string("end"));
@@ -24,7 +24,7 @@ static jv parse_slice(jv j, jv slice, int* pstart, int* pend) {
     jv_free(start_jv);
     start_jv = jv_number(0);
   }
-  int len;
+  ArraySize_t len;
   if (jv_get_kind(j) == JV_KIND_ARRAY) {
     len = jv_array_length(j);
   } else if (jv_get_kind(j) == JV_KIND_STRING) {
@@ -41,7 +41,7 @@ static jv parse_slice(jv j, jv slice, int* pstart, int* pend) {
   }
   if (jv_get_kind(end_jv) == JV_KIND_NULL) {
     jv_free(end_jv);
-    end_jv = jv_number(len);
+    end_jv = jv_number_i(len);
   }
   if (jv_get_kind(start_jv) != JV_KIND_NUMBER ||
       jv_get_kind(end_jv) != JV_KIND_NUMBER) {
@@ -52,28 +52,28 @@ static jv parse_slice(jv j, jv slice, int* pstart, int* pend) {
 
   double dstart = jv_number_value(start_jv);
   double dend = jv_number_value(end_jv);
-  int start, end;
+  double start, end;
 
   jv_free(start_jv);
   jv_free(end_jv);
   if (isnan(dstart)) dstart = 0;
-  if (dstart < 0)    dstart += len;
+  if (dstart < 0)    dstart += (double)len;
   if (dstart < 0)    dstart = 0;
-  if (dstart > len)  dstart = len;
+  if (dstart > (double)len)  dstart = (double)len;
   start = dstart > INT_MAX ? INT_MAX : (int)dstart; // Rounds down
 
-  if (isnan(dend))   dend = len;
-  if (dend < 0)      dend += len;
+  if (isnan(dend))   dend = (double)len;
+  if (dend < 0)      dend += (double)len;
   if (dend < 0)      dend  = start;
   end = dend > INT_MAX ? INT_MAX : (int)dend;
-  if (end > len)     end = len;
-  if (end < len)     end += end < dend ? 1 : 0; // We round start down
+  if (end > (double)len)     end = (double)len;
+  if (end < (double)len)     end += end < dend ? 1 : 0; // We round start down
                                                 // but round end up
 
   if (end < start) end = start;
-  assert(0 <= start && start <= end && end <= len);
-  *pstart = start;
-  *pend = end;
+  assert(0 <= start && start <= end && end <= (double)len);
+  *pstart = (ArraySize_t)start;
+  *pend = (ArraySize_t)end;
   return jv_true();
 }
 
@@ -96,7 +96,7 @@ jv jv_get(jv t, jv k) {
       } else {
         if (didx < INT_MIN) didx = INT_MIN;
         if (didx > INT_MAX) didx = INT_MAX;
-        int idx = (int)didx;
+        ArraySize_t idx = (ArraySize_t)didx;
         if (idx < 0)
           idx += jv_array_length(jv_copy(t));
         v = jv_array_get(t, idx);
@@ -108,7 +108,7 @@ jv jv_get(jv t, jv k) {
     }
     jv_free(k);
   } else if (jv_get_kind(t) == JV_KIND_ARRAY && jv_get_kind(k) == JV_KIND_OBJECT) {
-    int start, end;
+    ArraySize_t start, end;
     jv e = parse_slice(jv_copy(t), k, &start, &end);
     if (jv_get_kind(e) == JV_KIND_TRUE) {
       v = jv_array_slice(t, start, end);
@@ -117,7 +117,7 @@ jv jv_get(jv t, jv k) {
       v = e;
     }
   } else if (jv_get_kind(t) == JV_KIND_STRING && jv_get_kind(k) == JV_KIND_OBJECT) {
-    int start, end;
+    ArraySize_t start, end;
     jv e = parse_slice(jv_copy(t), k, &start, &end);
     if (jv_get_kind(e) == JV_KIND_TRUE) {
       v = jv_string_slice(t, start, end);
@@ -175,30 +175,30 @@ jv jv_set(jv t, jv k, jv v) {
   } else if (jv_get_kind(k) == JV_KIND_OBJECT &&
              (jv_get_kind(t) == JV_KIND_ARRAY || isnull)) {
     if (isnull) t = jv_array();
-    int start, end;
+    ArraySize_t start, end;
     jv e = parse_slice(jv_copy(t), k, &start, &end);
     if (jv_get_kind(e) == JV_KIND_TRUE) {
       if (jv_get_kind(v) == JV_KIND_ARRAY) {
-        int array_len = jv_array_length(jv_copy(t));
+        ArraySize_t array_len = jv_array_length(jv_copy(t));
         assert(0 <= start && start <= end && end <= array_len);
-        int slice_len = end - start;
-        int insert_len = jv_array_length(jv_copy(v));
+        ArraySize_t slice_len = end - start;
+        ArraySize_t insert_len = jv_array_length(jv_copy(v));
         if (slice_len < insert_len) {
           // array is growing
-          int shift = insert_len - slice_len;
-          for (int i = array_len - 1; i >= end && jv_is_valid(t); i--) {
+          ArraySize_t shift = insert_len - slice_len;
+          for (ArraySize_t i = array_len - 1; i >= end && jv_is_valid(t); i--) {
             t = jv_array_set(t, i + shift, jv_array_get(jv_copy(t), i));
           }
         } else if (slice_len > insert_len) {
           // array is shrinking
-          int shift = slice_len - insert_len;
-          for (int i = end; i < array_len && jv_is_valid(t); i++) {
+          ArraySize_t shift = slice_len - insert_len;
+          for (ArraySize_t i = end; i < array_len && jv_is_valid(t); i++) {
             t = jv_array_set(t, i - shift, jv_array_get(jv_copy(t), i));
           }
           if (jv_is_valid(t))
             t = jv_array_slice(t, 0, array_len - shift);
         }
-        for (int i = 0; i < insert_len && jv_is_valid(t); i++) {
+        for (ArraySize_t i = 0; i < insert_len && jv_is_valid(t); i++) {
           t = jv_array_set(t, start + i, jv_array_get(jv_copy(v), i));
         }
         jv_free(v);
@@ -285,11 +285,11 @@ static jv jv_dels(jv t, jv keys) {
           nonneg_keys = jv_array_append(nonneg_keys, key);
         }
       } else if (jv_get_kind(key) == JV_KIND_OBJECT) {
-        int start, end;
+        ArraySize_t start, end;
         jv e = parse_slice(jv_copy(t), key, &start, &end);
         if (jv_get_kind(e) == JV_KIND_TRUE) {
-          starts = jv_array_append(starts, jv_number(start));
-          ends = jv_array_append(ends, jv_number(end));
+          starts = jv_array_append(starts, jv_number_i(start));
+          ends = jv_array_append(ends, jv_number_i(end));
         } else {
           jv_free(new_array);
           jv_free(key);
@@ -305,13 +305,13 @@ static jv jv_dels(jv t, jv keys) {
       }
     }
 
-    int neg_idx = 0;
-    int nonneg_idx = 0;
-    int len = jv_array_length(jv_copy(t));
-    for (int i = 0; i < len; ++i) {
+    ArraySize_t neg_idx = 0;
+    ArraySize_t nonneg_idx = 0;
+    ArraySize_t len = jv_array_length(jv_copy(t));
+    for (ArraySize_t i = 0; i < len; ++i) {
       int del = 0;
       while (neg_idx < jv_array_length(jv_copy(neg_keys))) {
-        int delidx = len + (int)jv_number_get_value_and_consume(jv_array_get(jv_copy(neg_keys), neg_idx));
+        ArraySize_t delidx = len + (ArraySize_t)jv_number_get_value_and_consume(jv_array_get(jv_copy(neg_keys), neg_idx));
         if (i == delidx) {
           del = 1;
         }
@@ -321,7 +321,7 @@ static jv jv_dels(jv t, jv keys) {
         neg_idx++;
       }
       while (nonneg_idx < jv_array_length(jv_copy(nonneg_keys))) {
-        int delidx = (int)jv_number_get_value_and_consume(jv_array_get(jv_copy(nonneg_keys), nonneg_idx));
+        ArraySize_t delidx = (ArraySize_t)jv_number_get_value_and_consume(jv_array_get(jv_copy(nonneg_keys), nonneg_idx));
         if (i == delidx) {
           del = 1;
         }
@@ -330,9 +330,9 @@ static jv jv_dels(jv t, jv keys) {
         }
         nonneg_idx++;
       }
-      for (int sidx=0; !del && sidx<jv_array_length(jv_copy(starts)); sidx++) {
-        if ((int)jv_number_get_value_and_consume(jv_array_get(jv_copy(starts), sidx)) <= i &&
-            i < (int)jv_number_get_value_and_consume(jv_array_get(jv_copy(ends), sidx))) {
+      for (ArraySize_t sidx=0; !del && sidx<jv_array_length(jv_copy(starts)); sidx++) {
+        if ((ArraySize_t)jv_number_get_value_and_consume(jv_array_get(jv_copy(starts), sidx)) <= i &&
+            i < (ArraySize_t)jv_number_get_value_and_consume(jv_array_get(jv_copy(ends), sidx))) {
           del = 1;
         }
       }
@@ -523,12 +523,12 @@ jv jv_delpaths(jv object, jv paths) {
 static int string_cmp(const void* pa, const void* pb){
   const jv* a = pa;
   const jv* b = pb;
-  int lena = jv_string_length_bytes(jv_copy(*a));
-  int lenb = jv_string_length_bytes(jv_copy(*b));
-  int minlen = lena < lenb ? lena : lenb;
-  int r = memcmp(jv_string_value(*a), jv_string_value(*b), minlen);
+  ArraySize_t lena = jv_string_length_bytes(jv_copy(*a));
+  ArraySize_t lenb = jv_string_length_bytes(jv_copy(*b));
+  ArraySize_t minlen = lena < lenb ? lena : lenb;
+  ArraySize_t r = memcmp(jv_string_value(*a), jv_string_value(*b), minlen);
   if (r == 0) r = lena - lenb;
-  return r;
+  return (int)r;
 }
 
 jv jv_keys_unsorted(jv x) {
@@ -545,30 +545,30 @@ jv jv_keys_unsorted(jv x) {
 
 jv jv_keys(jv x) {
   if (jv_get_kind(x) == JV_KIND_OBJECT) {
-    int nkeys = jv_object_length(jv_copy(x));
+    ArraySize_t nkeys = jv_object_length(jv_copy(x));
     if (nkeys == 0) {
       jv_free(x);
       return jv_array();
     }
     jv* keys = jv_mem_calloc(nkeys, sizeof(jv));
-    int kidx = 0;
+    ArraySize_t kidx = 0;
     jv_object_foreach(x, key, value) {
       keys[kidx++] = key;
       jv_free(value);
     }
     qsort(keys, nkeys, sizeof(jv), string_cmp);
     jv answer = jv_array_sized(nkeys);
-    for (int i = 0; i<nkeys; i++) {
+    for (ArraySize_t i = 0; i<nkeys; i++) {
       answer = jv_array_append(answer, keys[i]);
     }
     jv_mem_free(keys);
     jv_free(x);
     return answer;
   } else if (jv_get_kind(x) == JV_KIND_ARRAY) {
-    int n = jv_array_length(x);
+    ArraySize_t n = jv_array_length(x);
     jv answer = jv_array();
-    for (int i=0; i<n; i++){
-      answer = jv_array_set(answer, i, jv_number(i));
+    for (ArraySize_t i=0; i<n; i++){
+      answer = jv_array_set(answer, i, jv_number_i(i));
     }
     return answer;
   } else {
@@ -655,7 +655,7 @@ int jv_cmp(jv a, jv b) {
 struct sort_entry {
   jv object;
   jv key;
-  int index;
+  ArraySize_t index;
 };
 
 static int sort_cmp(const void* pa, const void* pb) {
@@ -663,21 +663,21 @@ static int sort_cmp(const void* pa, const void* pb) {
   const struct sort_entry* b = pb;
   int r = jv_cmp(jv_copy(a->key), jv_copy(b->key));
   // comparing by index if r == 0 makes the sort stable
-  return r ? r : (a->index - b->index);
+  return r ? r : (int)(a->index - b->index);
 }
 
 static struct sort_entry* sort_items(jv objects, jv keys) {
   assert(jv_get_kind(objects) == JV_KIND_ARRAY);
   assert(jv_get_kind(keys) == JV_KIND_ARRAY);
   assert(jv_array_length(jv_copy(objects)) == jv_array_length(jv_copy(keys)));
-  int n = jv_array_length(jv_copy(objects));
+  ArraySize_t n = jv_array_length(jv_copy(objects));
   if (n == 0) {
     jv_free(objects);
     jv_free(keys);
     return NULL;
   }
   struct sort_entry* entries = jv_mem_calloc(n, sizeof(struct sort_entry));
-  for (int i=0; i<n; i++) {
+  for (ArraySize_t i=0; i<n; i++) {
     entries[i].object = jv_array_get(jv_copy(objects), i);
     entries[i].key = jv_array_get(jv_copy(keys), i);
     entries[i].index = i;
@@ -692,10 +692,10 @@ jv jv_sort(jv objects, jv keys) {
   assert(jv_get_kind(objects) == JV_KIND_ARRAY);
   assert(jv_get_kind(keys) == JV_KIND_ARRAY);
   assert(jv_array_length(jv_copy(objects)) == jv_array_length(jv_copy(keys)));
-  int n = jv_array_length(jv_copy(objects));
+  ArraySize_t n = jv_array_length(jv_copy(objects));
   struct sort_entry* entries = sort_items(objects, keys);
   jv ret = jv_array();
-  for (int i=0; i<n; i++) {
+  for (ArraySize_t i=0; i<n; i++) {
     jv_free(entries[i].key);
     ret = jv_array_set(ret, i, entries[i].object);
   }
@@ -707,13 +707,13 @@ jv jv_group(jv objects, jv keys) {
   assert(jv_get_kind(objects) == JV_KIND_ARRAY);
   assert(jv_get_kind(keys) == JV_KIND_ARRAY);
   assert(jv_array_length(jv_copy(objects)) == jv_array_length(jv_copy(keys)));
-  int n = jv_array_length(jv_copy(objects));
+  ArraySize_t n = jv_array_length(jv_copy(objects));
   struct sort_entry* entries = sort_items(objects, keys);
   jv ret = jv_array();
   if (n > 0) {
     jv curr_key = entries[0].key;
     jv group = jv_array_append(jv_array(), entries[0].object);
-    for (int i = 1; i < n; i++) {
+    for (ArraySize_t i = 1; i < n; i++) {
       if (jv_equal(jv_copy(curr_key), jv_copy(entries[i].key))) {
         jv_free(entries[i].key);
       } else {
@@ -735,11 +735,11 @@ jv jv_unique(jv objects, jv keys) {
   assert(jv_get_kind(objects) == JV_KIND_ARRAY);
   assert(jv_get_kind(keys) == JV_KIND_ARRAY);
   assert(jv_array_length(jv_copy(objects)) == jv_array_length(jv_copy(keys)));
-  int n = jv_array_length(jv_copy(objects));
+  ArraySize_t n = jv_array_length(jv_copy(objects));
   struct sort_entry* entries = sort_items(objects, keys);
   jv ret = jv_array();
   jv curr_key = jv_invalid();
-  for (int i = 0; i < n; i++) {
+  for (ArraySize_t i = 0; i < n; i++) {
     if (jv_equal(jv_copy(curr_key), jv_copy(entries[i].key))) {
       jv_free(entries[i].key);
       jv_free(entries[i].object);

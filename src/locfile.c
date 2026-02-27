@@ -9,7 +9,7 @@
 #include "locfile.h"
 #include "util.h"
 
-struct locfile* locfile_init(jq_state *jq, const char *fname, const char* data, int length) {
+struct locfile* locfile_init(jq_state *jq, const char *fname, const char* data, size_t length) {
   struct locfile* l = jv_mem_alloc(sizeof(struct locfile));
   l->jq = jq;
   l->fname = jv_string(fname);
@@ -18,13 +18,13 @@ struct locfile* locfile_init(jq_state *jq, const char *fname, const char* data, 
   l->length = length;
   l->nlines = 1;
   l->refct = 1;
-  for (int i=0; i<length; i++) {
+  for (size_t i=0; i<length; i++) {
     if (data[i] == '\n') l->nlines++;
   }
-  l->linemap = jv_mem_calloc(l->nlines + 1, sizeof(int));
+  l->linemap = jv_mem_calloc(l->nlines + 1, sizeof(size_t));
   l->linemap[0] = 0;
-  int line = 1;
-  for (int i=0; i<length; i++) {
+  size_t line = 1;
+  for (size_t i=0; i<length; i++) {
     if (data[i] == '\n') {
       l->linemap[line] = i+1;   // at start of line, not of \n
       line++;
@@ -57,7 +57,7 @@ int locfile_get_line(struct locfile* l, int pos) {
 
 static int locfile_line_length(struct locfile* l, int line) {
   assert(line < l->nlines);
-  return l->linemap[line+1] - l->linemap[line] -1;   // -1 to omit \n
+  return (int)(l->linemap[line+1] - l->linemap[line] -1);   // -1 to omit \n
 }
 
 void locfile_locate(struct locfile* l, location loc, const char* fmt, ...) {
@@ -77,14 +77,14 @@ void locfile_locate(struct locfile* l, location loc, const char* fmt, ...) {
   }
 
   int startline = locfile_get_line(l, loc.start);
-  int offset = l->linemap[startline];
-  int end = MIN(loc.end, MAX(l->linemap[startline+1] - 1, loc.start + 1));
+  size_t offset = l->linemap[startline];
+  int end = MIN(loc.end, (int)(MAX(l->linemap[startline+1] - 1, loc.start + 1)));
   jv underline = jv_string_repeat(jv_string("^"), end - loc.start);
-  jv m2 = jv_string_fmt("%s at %s, line %d, column %d:\n    %.*s\n    %*s",
+  jv m2 = jv_string_fmt("%s at %s, line %d, column %ld:\n    %.*s\n    %*s",
                         jv_string_value(m1), jv_string_value(l->fname),
                         startline + 1, loc.start - offset + 1,
                         locfile_line_length(l, startline), l->data + offset,
-                        end - offset, jv_string_value(underline));
+                        (int)(end - offset), jv_string_value(underline));
   jv_free(m1);
   jv_free(underline);
   jq_report_error(l->jq, m2);

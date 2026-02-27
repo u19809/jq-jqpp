@@ -3,6 +3,10 @@
 
 #include <stddef.h>
 
+#ifdef WIN32
+#define __attribute__(x) 
+#endif
+
 void* jv_mem_alloc(size_t);
 void* jv_mem_alloc_unguarded(size_t);
 void* jv_mem_calloc(size_t, size_t);

@@ -45,7 +45,7 @@ static size_t align_round_up(size_t sz) {
   return ((sz + (ALIGNMENT - 1)) / ALIGNMENT) * ALIGNMENT;
 }
 
-typedef int stack_ptr;
+typedef int64_t stack_ptr;
 
 struct stack {
   char* mem_end; // one-past-the-end of allocated region
@@ -62,7 +62,7 @@ static void stack_init(struct stack* s) {
 static void stack_reset(struct stack* s) {
   assert(s->limit == 0 && "stack freed while not empty");
   if(s->mem_end != NULL) {
-    char* mem_start = s->mem_end - ( -s->bound + ALIGNMENT);
+    char* mem_start = s->mem_end - ( -(int)s->bound + ALIGNMENT);
     free(mem_start);
   }
   stack_init(s);
@@ -81,19 +81,19 @@ static stack_ptr* stack_block_next(struct stack* s, stack_ptr p) {
 }
 
 static void stack_reallocate(struct stack* s, size_t sz) {
-  int old_mem_length = -(s->bound) + ALIGNMENT;
+  size_t old_mem_length = -(int)(s->bound) + ALIGNMENT;
   char* old_mem_start = (s->mem_end != NULL) ? (s->mem_end - old_mem_length) : NULL;
 
-  int new_mem_length = align_round_up((old_mem_length + sz + 256) * 2);
+  size_t new_mem_length = align_round_up((old_mem_length + sz + 256) * 2);
   char* new_mem_start = jv_mem_realloc(old_mem_start, new_mem_length);
   memmove(new_mem_start + (new_mem_length - old_mem_length),
             new_mem_start, old_mem_length);
   s->mem_end = new_mem_start + new_mem_length;
-  s->bound = -(new_mem_length - ALIGNMENT);
+  s->bound = -(int)(new_mem_length - (size_t)ALIGNMENT);
 }
 
 static stack_ptr stack_push_block(struct stack* s, stack_ptr p, size_t sz) {
-  int alloc_sz = align_round_up(sz) + ALIGNMENT;
+  size_t alloc_sz = align_round_up(sz) + ALIGNMENT;
   stack_ptr r = s->limit - alloc_sz;
   if (r < s->bound) {
     stack_reallocate(s, alloc_sz);
@@ -106,7 +106,7 @@ static stack_ptr stack_push_block(struct stack* s, stack_ptr p, size_t sz) {
 static stack_ptr stack_pop_block(struct stack* s, stack_ptr p, size_t sz) {
   stack_ptr r = *stack_block_next(s, p);
   if (p == s->limit) {
-    int alloc_sz = align_round_up(sz) + ALIGNMENT;
+    size_t alloc_sz = align_round_up(sz) + ALIGNMENT;
     s->limit += alloc_sz;
   }
   return r;

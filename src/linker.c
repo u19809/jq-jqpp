@@ -6,10 +6,51 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <sys/stat.h>
-#include <libgen.h>
 
-#ifdef WIN32
+#ifdef _WIN32
+#include <windows.h>
+#include <stdlib.h>
+#include <string.h>
 #include <shlwapi.h>
+
+#define strdup _strdup
+
+// A buffer size for path components on Windows
+#define WIN_PATH_MAX 260 
+
+static char* dirname(char* path) {
+    static char dir[WIN_PATH_MAX];
+    char drive[_MAX_DRIVE];
+    char directory[_MAX_DIR];
+    
+    // Splits "C:/Data/Projects/jq/main.c" into "C:" and "/Data/Projects/jq/"
+    if (_splitpath_s(path, drive, _MAX_DRIVE, directory, _MAX_DIR, NULL, 0, NULL, 0) == 0) {
+        _snprintf_s(dir, WIN_PATH_MAX, _TRUNCATE, "%s%s", drive, directory);
+        
+        // Remove trailing slash to match POSIX dirname behavior
+        size_t len = strlen(dir);
+        if (len > 0 && (dir[len-1] == '/' || dir[len-1] == '\\')) {
+            dir[len-1] = '\0';
+        }
+        return dir;
+    }
+    return ".";
+}
+
+static char* basename(char* path) {
+    static char base[WIN_PATH_MAX];
+    char fname[_MAX_FNAME];
+    char ext[_MAX_EXT];
+
+    // Splits the filename and extension
+    if (_splitpath_s(path, NULL, 0, NULL, 0, fname, _MAX_FNAME, ext, _MAX_EXT) == 0) {
+        _snprintf_s(base, WIN_PATH_MAX, _TRUNCATE, "%s%s", fname, ext);
+        return base;
+    }
+    return path;
+}
+#else
+#include <libgen.h>
 #endif
 
 #include "jq_parser.h"
@@ -247,7 +288,7 @@ static int process_dependencies(jq_state *jq, jv jq_origin, jv lib_origin, block
   int nerrors = 0;
 
   // XXX This is a backward jv_array_foreach because bindings go in reverse
-  for (int i = jv_array_length(jv_copy(deps)); i > 0; ) {
+  for (ArraySize_t i = jv_array_length(jv_copy(deps)); i > 0; ) {
     i--;
     jv dep = jv_array_get(jv_copy(deps), i);
 
@@ -337,7 +378,7 @@ static int load_library(jq_state *jq, jv lib_path, int is_data, int raw, int opt
     data = jv_load_file(jv_string_value(lib_path), 0);
   else
     data = jv_load_file(jv_string_value(lib_path), 1);
-  int state_idx;
+  size_t state_idx;
   if (!jv_is_valid(data)) {
     program = gen_noop();
     if (!optional) {

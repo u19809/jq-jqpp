@@ -1,3 +1,6 @@
+// contains system capabilities
+#include <jq_config.h>
+
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -188,6 +191,7 @@ static void run_jq_tests(jv lib_dirs, int verbose, FILE *testdata, int skip, int
         jv_free(expected);
         jv_free(actual);
         printf("*** Insufficient results for test at line number %u: %s\n", lineno, prog);
+        printf("*** Expected %s\n", buf);
         pass = 0;
         break;
       } else if (!jv_equal(jv_copy(expected), jv_copy(actual))) {

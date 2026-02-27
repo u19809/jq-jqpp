@@ -2,8 +2,9 @@
 #define JV_H
 
 #include <stdarg.h>
-#include <stdint.h>
 #include <stdio.h>
+#include <limits.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -15,6 +16,12 @@ extern "C" {
 #else
 # define JQ_FALLTHROUGH do {} while (0) /* fallthrough */
 #endif
+
+// intptr_t is 32 on 32 bit bulds and 64 or 64 bit builds
+// but we make a typedef to make it more readable
+typedef intptr_t ArraySize_t;
+#define ALLOCSIZE_MAX SIZE_MAX
+#define ARRAYSIZE_MAX 999999999
 
 typedef enum {
   JV_KIND_INVALID,
@@ -31,11 +38,11 @@ struct jv_refcnt;
 
 /* All of the fields of this struct are private.
    Really. Do not play with them. */
-typedef struct {
+typedef struct jv {
   unsigned char kind_flags;
   unsigned char pad_;
   unsigned short offset;  /* array offsets */
-  int size;
+  ArraySize_t size;
   union {
     struct jv_refcnt* ptr;
     double number;
@@ -69,11 +76,14 @@ jv jv_null(void);
 jv jv_true(void);
 jv jv_false(void);
 jv jv_bool(int);
+int jv_bool_value( jv );
 
 jv jv_number(double);
+jv jv_number_i(ArraySize_t);
+
 jv jv_number_with_literal(const char*);
 double jv_number_value(jv);
-int jv_is_integer(jv);
+ArraySize_t jv_is_integer(jv);
 jv jv_number_abs(jv);
 jv jv_number_negate(jv);
 
@@ -81,22 +91,39 @@ int jv_number_has_literal(jv);
 const char* jv_number_get_literal(jv);
 
 jv jv_array(void);
-jv jv_array_sized(int);
-int jv_array_length(jv);
-jv jv_array_get(jv, int);
-jv jv_array_set(jv, int, jv);
+jv jv_array_sized(ArraySize_t);
+ArraySize_t jv_array_length(jv);
+jv jv_array_get(jv, ArraySize_t);
+jv jv_array_set(jv, ArraySize_t, jv);
 jv jv_array_append(jv, jv);
 jv jv_array_concat(jv, jv);
-jv jv_array_slice(jv, int, int);
+jv jv_array_slice(jv, ArraySize_t, ArraySize_t);
 jv jv_array_indexes(jv, jv);
 #define jv_array_foreach(a, i, x) \
-  for (int jv_len__ = jv_array_length(jv_copy(a)), i=0, jv_j__ = 1;     \
+  for (ArraySize_t jv_len__ = jv_array_length(jv_copy(a)), i=0, jv_j__ = 1;     \
        jv_j__; jv_j__ = 0)                                              \
     for (jv x;                                                          \
          i < jv_len__ ?                                                 \
            (x = jv_array_get(jv_copy(a), i), 1) : 0;                    \
          i++)
 
+#ifdef WIN32
+#define JV_ARRAY_EXPAND(x) x
+#define JV_ARRAY_1(e) (jv_array_append(jv_array(),e))
+#define JV_ARRAY_2(e1,e2) (jv_array_append(JV_ARRAY_1(e1),e2))
+#define JV_ARRAY_3(e1,e2,e3) (jv_array_append(JV_ARRAY_2(e1,e2),e3))
+#define JV_ARRAY_4(e1,e2,e3,e4) (jv_array_append(JV_ARRAY_3(e1,e2,e3),e4))
+#define JV_ARRAY_5(e1,e2,e3,e4,e5) (jv_array_append(JV_ARRAY_4(e1,e2,e3,e4),e5))
+#define JV_ARRAY_6(e1,e2,e3,e4,e5,e6) (jv_array_append(JV_ARRAY_5(e1,e2,e3,e4,e5),e6))
+#define JV_ARRAY_7(e1,e2,e3,e4,e5,e6,e7) (jv_array_append(JV_ARRAY_6(e1,e2,e3,e4,e5,e6),e7))
+#define JV_ARRAY_8(e1,e2,e3,e4,e5,e6,e7,e8) (jv_array_append(JV_ARRAY_7(e1,e2,e3,e4,e5,e6,e7),e8))
+#define JV_ARRAY_9(e1,e2,e3,e4,e5,e6,e7,e8,e9) (jv_array_append(JV_ARRAY_8(e1,e2,e3,e4,e5,e6,e7,e8),e9))
+#define JV_ARRAY_IDX(_1,_2,_3,_4,_5,_6,_7,_8,_9,NAME,...) NAME
+#define JV_ARRAY_SELECT(...) \
+	JV_ARRAY_EXPAND( JV_ARRAY_IDX( __VA_ARGS__, JV_ARRAY_9, JV_ARRAY_8, JV_ARRAY_7, JV_ARRAY_6, JV_ARRAY_5, JV_ARRAY_4, JV_ARRAY_3, JV_ARRAY_2, JV_ARRAY_1))
+#define JV_ARRAY(...) \
+  JV_ARRAY_EXPAND(JV_ARRAY_SELECT(__VA_ARGS__)(__VA_ARGS__))
+#else
 #define JV_ARRAY_1(e) (jv_array_append(jv_array(),e))
 #define JV_ARRAY_2(e1,e2) (jv_array_append(JV_ARRAY_1(e1),e2))
 #define JV_ARRAY_3(e1,e2,e3) (jv_array_append(JV_ARRAY_2(e1,e2),e3))
@@ -109,6 +136,7 @@ jv jv_array_indexes(jv, jv);
 #define JV_ARRAY_IDX(_1,_2,_3,_4,_5,_6,_7,_8,_9,NAME,...) NAME
 #define JV_ARRAY(...) \
   JV_ARRAY_IDX(__VA_ARGS__, JV_ARRAY_9, JV_ARRAY_8, JV_ARRAY_7, JV_ARRAY_6, JV_ARRAY_5, JV_ARRAY_4, JV_ARRAY_3, JV_ARRAY_2, JV_ARRAY_1, dummy)(__VA_ARGS__)
+#endif
 
 #ifdef __GNUC__
 #define JV_PRINTF_LIKE(fmt_arg_num, args_num) \
@@ -122,21 +150,22 @@ jv jv_array_indexes(jv, jv);
 
 
 jv jv_string(const char*);
-jv jv_string_sized(const char*, int);
-jv jv_string_empty(int len);
-int jv_string_length_bytes(jv);
-int jv_string_length_codepoints(jv);
+jv jv_string_sized(const char*, ArraySize_t);
+jv jv_string_empty(ArraySize_t len);
+jv jv_string_slice(jv j, ArraySize_t start, ArraySize_t end);
+
+ArraySize_t jv_string_length_bytes(jv);
+ArraySize_t jv_string_length_codepoints(jv);
 unsigned long jv_string_hash(jv);
 const char* jv_string_value(jv);
 jv jv_string_indexes(jv j, jv k);
-jv jv_string_slice(jv j, int start, int end);
 jv jv_string_concat(jv, jv);
 jv jv_string_vfmt(const char*, va_list) JV_VPRINTF_LIKE(1);
 jv jv_string_fmt(const char*, ...) JV_PRINTF_LIKE(1, 2);
 jv jv_string_append_codepoint(jv a, uint32_t c);
-jv jv_string_append_buf(jv a, const char* buf, int len);
+jv jv_string_append_buf(jv a, const char *buf, ArraySize_t len);
 jv jv_string_append_str(jv a, const char* str);
-jv jv_string_repeat(jv j, int n);
+jv jv_string_repeat(jv j, ArraySize_t n);
 jv jv_string_split(jv j, jv sep);
 jv jv_string_explode(jv j);
 jv jv_string_implode(jv j);
@@ -146,17 +175,17 @@ jv jv_object_get(jv object, jv key);
 int jv_object_has(jv object, jv key);
 jv jv_object_set(jv object, jv key, jv value);
 jv jv_object_delete(jv object, jv key);
-int jv_object_length(jv object);
+ArraySize_t jv_object_length(jv object);
 jv jv_object_merge(jv, jv);
 jv jv_object_merge_recursive(jv, jv);
 
-int jv_object_iter(jv);
-int jv_object_iter_next(jv, int);
-int jv_object_iter_valid(jv, int);
-jv jv_object_iter_key(jv, int);
-jv jv_object_iter_value(jv, int);
+ArraySize_t jv_object_iter(jv);
+ArraySize_t jv_object_iter_next(jv, ArraySize_t);
+int jv_object_iter_valid(jv, ArraySize_t);
+jv jv_object_iter_key(jv, ArraySize_t);
+jv jv_object_iter_value(jv, ArraySize_t);
 #define jv_object_foreach(t, k, v)                                      \
-  for (int jv_i__ = jv_object_iter(t), jv_j__ = 1; jv_j__; jv_j__ = 0)  \
+  for (ArraySize_t jv_i__ = jv_object_iter(t), jv_j__ = 1; jv_j__; jv_j__ = 0)  \
     for (jv k, v;                                                       \
          jv_object_iter_valid((t), jv_i__) ?                            \
            (k = jv_object_iter_key(t, jv_i__),                          \
@@ -166,7 +195,7 @@ jv jv_object_iter_value(jv, int);
          jv_i__ = jv_object_iter_next(t, jv_i__))                       \
 
 #define jv_object_keys_foreach(t, k)                                 \
-  for (int jv_i__ = jv_object_iter(t), jv_j__ = 1; jv_j__; jv_j__ = 0)  \
+  for (ArraySize_t jv_i__ = jv_object_iter(t), jv_j__ = 1; jv_j__; jv_j__ = 0)  \
     for (jv k;                                                          \
          jv_object_iter_valid((t), jv_i__) ?                            \
            (k = jv_object_iter_key(t, jv_i__),                          \
@@ -211,8 +240,6 @@ jv jv_object_iter_value(jv, int);
                 JV_OBJECT_6, JV_OBJECT_5, JV_OBJECT_4, JV_OBJECT_3,     \
                 JV_OBJECT_2, JV_OBJECT_1)(__VA_ARGS__)
 
-
-
 int jv_get_refcnt(jv);
 
 enum jv_print_flags {
@@ -234,7 +261,7 @@ void jv_dumpf(jv, FILE *f, int flags);
 void jv_dump(jv, int flags);
 void jv_show(jv, int flags);
 jv jv_dump_string(jv, int flags);
-char *jv_dump_string_trunc(jv x, char *outbuf, size_t bufsize);
+char *jv_dump_string_trunc(jv x, char *outbuf, ArraySize_t bufsize);
 
 enum {
   JV_PARSE_SEQ              = 1,
@@ -243,7 +270,7 @@ enum {
 };
 
 jv jv_parse(const char* string);
-jv jv_parse_sized(const char* string, int length);
+jv jv_parse_sized(const char* string, ArraySize_t length);
 jv jv_parse_custom_flags(const char* string, int flags);
 
 typedef void (*jv_nomem_handler_f)(void *);
@@ -253,8 +280,8 @@ jv jv_load_file(const char *, int);
 
 typedef struct jv_parser jv_parser;
 jv_parser* jv_parser_new(int);
-void jv_parser_set_buf(jv_parser*, const char*, int, int);
-int jv_parser_remaining(jv_parser*);
+void jv_parser_set_buf(jv_parser*, const char*, ArraySize_t, int);
+ArraySize_t jv_parser_remaining(jv_parser *);
 jv jv_parser_next(jv_parser*);
 void jv_parser_free(jv_parser*);
 

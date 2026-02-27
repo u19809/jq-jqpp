@@ -1,3 +1,7 @@
+%top{
+#include <stdint.h>
+}
+
 %{
 #include <assert.h>
 #include "jv_alloc.h"

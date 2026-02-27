@@ -6,6 +6,14 @@
 #include "jv_dtoa.h"
 #include "jv_alloc.h"
 
+#ifdef WIN32
+#define pthread_once_t INIT_ONCE
+#define PTHREAD_ONCE_INIT INIT_ONCE_STATIC_INIT
+
+inline void pthread_once(pthread_once_t* guard, void (*func)(void)) {
+    InitOnceExecuteOnce(guard, (PINIT_ONCE_FN)func, NULL, NULL);
+}
+#endif
 static pthread_once_t dtoa_ctx_once = PTHREAD_ONCE_INIT;
 
 static pthread_key_t dtoa_ctx_key;
@@ -36,7 +44,7 @@ void jv_tsd_dtoa_ctx_init(void) {
   atexit(jv_tsd_dtoa_ctx_fini);
 }
 
-inline struct dtoa_context *tsd_dtoa_context_get(void) {
+struct dtoa_context *tsd_dtoa_context_get(void) {
   pthread_once(&dtoa_ctx_once, jv_tsd_dtoa_ctx_init); // cannot fail
   struct dtoa_context *ctx = (struct dtoa_context*)pthread_getspecific(dtoa_ctx_key);
   if (!ctx) {

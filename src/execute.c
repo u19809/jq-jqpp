@@ -214,7 +214,7 @@ void stack_save(jq_state *jq, uint16_t* retaddr, struct stack_pos sp){
   fork->saved_data_stack = jq->stk_top;
   fork->saved_curr_frame = jq->curr_frame;
   fork->path_len =
-    jv_get_kind(jq->path) == JV_KIND_ARRAY ? jv_array_length(jv_copy(jq->path)) : 0;
+    jv_get_kind(jq->path) == JV_KIND_ARRAY ? (int)jv_array_length(jv_copy(jq->path)) : 0;
   fork->value_at_path = jv_copy(jq->value_at_path);
   fork->subexp_nest = jq->subexp_nest;
   fork->return_address = retaddr;
@@ -233,9 +233,9 @@ static int path_intact(jq_state *jq, jv curr) {
 
 static void path_append(jq_state* jq, jv component, jv value_at_path) {
   if (jq->subexp_nest == 0 && jv_get_kind(jq->path) == JV_KIND_ARRAY) {
-    int n1 = jv_array_length(jv_copy(jq->path));
+    ArraySize_t n1 = jv_array_length(jv_copy(jq->path));
     jq->path = jv_array_append(jq->path, component);
-    int n2 = jv_array_length(jv_copy(jq->path));
+    ArraySize_t n2 = jv_array_length(jv_copy(jq->path));
     assert(n2 == n1 + 1);
     jv_free(jq->value_at_path);
     jq->value_at_path = value_at_path;
@@ -743,7 +743,7 @@ jv jq_next(jq_state *jq) {
     }
     case ON_BACKTRACK(EACH):
     case ON_BACKTRACK(EACH_OPT): {
-      int idx = jv_number_value(stack_pop(jq));
+      ArraySize_t idx = (ArraySize_t)jv_number_value(stack_pop(jq));
       jv container = stack_pop(jq);
 
       int keep_going, is_last = 0;
@@ -751,20 +751,20 @@ jv jq_next(jq_state *jq) {
       if (jv_get_kind(container) == JV_KIND_ARRAY) {
         if (opcode == EACH || opcode == EACH_OPT) idx = 0;
         else idx = idx + 1;
-        int len = jv_array_length(jv_copy(container));
+        ArraySize_t len = jv_array_length(jv_copy(container));
         keep_going = idx < len;
         is_last = idx == len - 1;
         if (keep_going) {
-          key = jv_number(idx);
+          key = jv_number_i(idx);
           value = jv_array_get(jv_copy(container), idx);
         }
       } else if (jv_get_kind(container) == JV_KIND_OBJECT) {
         if (opcode == EACH || opcode == EACH_OPT) idx = jv_object_iter(container);
-        else idx = jv_object_iter_next(container, idx);
-        keep_going = jv_object_iter_valid(container, idx);
+        else idx = jv_object_iter_next(container, (int)idx);
+        keep_going = jv_object_iter_valid(container, (int)idx);
         if (keep_going) {
-          key = jv_object_iter_key(container, idx);
-          value = jv_object_iter_value(container, idx);
+          key = jv_object_iter_key(container, (int)idx);
+          value = jv_object_iter_value(container, (int)idx);
         }
       } else {
         assert(opcode == EACH || opcode == EACH_OPT);
@@ -793,7 +793,7 @@ jv jq_next(jq_state *jq) {
       } else {
         struct stack_pos spos = stack_get_pos(jq);
         stack_push(jq, container);
-        stack_push(jq, jv_number(idx));
+        stack_push(jq, jv_number_i(idx));
         stack_save(jq, pc - 1, spos);
         path_append(jq, key, jv_copy(value));
         stack_push(jq, value);

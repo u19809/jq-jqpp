@@ -27,6 +27,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+// contains system capabilities
+#include <jq_config.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <assert.h>
@@ -34,11 +37,20 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <string.h>
+#ifndef WIN32
 #include <unistd.h>
+#else
+#define fileno fileno_s
+
+#endif
 #include <stdlib.h>
 #include <stddef.h>
 #ifdef HAVE_ALLOCA_H
+#ifdef WIN32
+# include <malloc.h>
+#else
 # include <alloca.h>
+#endif
 #elif !defined alloca
 # ifdef __GNUC__
 #  define alloca __builtin_alloca
@@ -59,6 +71,10 @@ void *alloca (size_t);
 #include <shellapi.h>
 #include <wchar.h>
 #include <wtypes.h>
+
+#ifndef PATH_MAX
+#define PATH_MAX MAX_PATH
+#endif
 #endif
 
 
@@ -67,7 +83,7 @@ void *alloca (size_t);
 #include "jv_alloc.h"
 #include "jv_unicode.h"
 
-#ifdef WIN32
+#ifdef WIN32ddd
 FILE *fopen(const char *fname, const char *mode) {
   size_t sz = sizeof(wchar_t) * MultiByteToWideChar(CP_UTF8, 0, fname, -1, NULL, 0);
   wchar_t *wfname = alloca(sz + 2); // +2 is not needed, but just in case
@@ -341,7 +357,7 @@ static int jq_util_input_read_more(jq_util_input_state *state) {
       } else if (p == NULL) {
         state->buf_valid_len = max_gets_len - 1;
         char *end = state->buf + state->buf_valid_len;
-        int len = 0;
+        size_t len = 0;
         if (jvp_utf8_backtrack(end - 1, state->buf, &len) && len > 0) {
           state->buf_valid_len += fread(end, 1, len, state->current_input);
         }
@@ -395,7 +411,7 @@ jv jq_util_input_get_current_line(jq_state* jq) {
   if (cb != jq_util_input_next_input_cb)
     return jv_invalid_with_msg(jv_string("Unknown input line number"));
   jq_util_input_state *s = (jq_util_input_state *)cb_data;
-  jv v = jv_number(s->current_line);
+  jv v = jv_number_i(s->current_line);
   return v;
 }
 

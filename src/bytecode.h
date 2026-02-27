@@ -1,6 +1,5 @@
 #ifndef BYTECODE_H
 #define BYTECODE_H
-#include <stdint.h>
 
 #include "jq.h"
 

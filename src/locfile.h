@@ -12,15 +12,15 @@ static const location UNKNOWN_LOCATION = {-1, -1};
 struct locfile {
   jv fname;
   const char* data;
-  int length;
-  int* linemap;
-  int nlines;
+  size_t length;
+  size_t* linemap;
+  size_t nlines;
   char *error;
   jq_state *jq;
   int refct;
 };
 
-struct locfile* locfile_init(jq_state *, const char *, const char *, int);
+struct locfile* locfile_init(jq_state *, const char *, const char *, size_t);
 struct locfile* locfile_retain(struct locfile *);
 int locfile_get_line(struct locfile *, int);
 void locfile_free(struct locfile *);

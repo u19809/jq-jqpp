@@ -1,8 +1,9 @@
+#ifndef WIN32
 #include <assert.h>
-#include <dlfcn.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <dlfcn.h>
 #include <unistd.h>
 
 static FILE *fail;
@@ -108,3 +109,5 @@ void clearerr(FILE *f) {
     error = 0;
   }
 }
+
+#endif
