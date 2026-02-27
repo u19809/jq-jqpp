@@ -43,23 +43,19 @@ class JQ::Value_P : public HasPublic<Value> {
         }
 
         Value_P & operator=(const jv & other) noexcept {
-            if ( ! jv_equal( value_, other ) ) {
-                if (jv_is_valid(value_)) {
-                    jv_free(value_);
-                }
-                value_ = jv_copy(other);
+            if (jv_is_valid(value_)) {
+                jv_free(value_);
             }
+            value_ = jv_copy(other);
             return *this;
         }
 
-        Value_P & operator=(jv & other) noexcept {
-            if ( ! jv_equal( value_, other ) ) {
-                if (jv_is_valid(value_)) {
-                    jv_free(value_);
-                }
-                value_ = other;
-                other = jv_invalid();
+        Value_P & operator=(jv && other) noexcept {
+            if (jv_is_valid(value_)) {
+                jv_free(value_);
             }
+            value_ = other;
+            other = jv_invalid();
             return *this;
         }
 
@@ -105,7 +101,7 @@ JQ::Value &JQ::Value::operator=(const Value &other)
 
 JQ::Value &JQ::Value::operator=(Value &&other) noexcept
 {
-    prv<Value_P>() = other.prv<Value_P>();
+    prv<Value_P>() = std::move(other.prv<Value_P>());
     return *this;
 }
 
@@ -115,7 +111,7 @@ JQ::Value &JQ::Value::operator=(const jv & other) noexcept {
 }
 
 JQ::Value &JQ::Value::operator=(jv && other)  noexcept {
-    prv<Value_P>() = other;
+    prv<Value_P>() = std::move(other);
     return *this;
 }
 
@@ -393,7 +389,7 @@ JQ::Array JQ::JQ::run(const Value &input)
 {
     Array L;
 
-    jq_start(prv<JQ_P>().jq_, input.get(), 0);
+    jq_start(prv<JQ_P>().jq_, jv_copy(input.get()), 0);
 
     jv output;
     while (jv_is_valid(output = jq_next(prv<JQ_P>().jq_))) {
