@@ -7,6 +7,8 @@
 #include <windows.h>
 #include <io.h>
 #include <fileapi.h>
+#define fileno _fileno
+
 #endif
 
 #include "jv.h"
@@ -95,7 +97,7 @@ int jq_set_colors(const char *code_str) {
   return 1;
 }
 
-static void put_buf(const char *s, int len, FILE *fout, jv *strout, int is_tty) {
+static void put_buf(const char *s, size_t len, FILE *fout, jv *strout, int is_tty) {
   if (strout) {
     *strout = jv_string_append_buf(*strout, s, len);
   } else {
@@ -106,13 +108,13 @@ static void put_buf(const char *s, int len, FILE *fout, jv *strout, int is_tty) 
     size_t wl;
     if (len == -1)
       len = strlen(s);
-    wl = MultiByteToWideChar(CP_UTF8, 0, s, len, NULL, 0);
+    wl = MultiByteToWideChar(CP_UTF8, 0, s, (int)len, NULL, 0);
     ws = jv_mem_calloc(wl + 1, sizeof(*ws));
     if (!ws)
       return;
-    wl = MultiByteToWideChar(CP_UTF8, 0, s, len, ws, wl + 1);
+    wl = MultiByteToWideChar(CP_UTF8, 0, s, (int)len, ws, (int)wl + 1);
     ws[wl] = 0;
-    WriteConsoleW((HANDLE)_get_osfhandle(fileno(fout)), ws, wl, NULL, NULL);
+    WriteConsoleW((HANDLE)_get_osfhandle(fileno(fout)), ws, (DWORD)wl, NULL, NULL);
     free(ws);
   } else
     fwrite(s, 1, len, fout);
@@ -280,7 +282,7 @@ static void jv_dump_term(struct dtoa_context* C, jv x, int flags, int indent, FI
   case JV_KIND_STRING:
     jvp_dump_string(x, flags & JV_PRINT_ASCII, F, S, flags & JV_PRINT_ISATTY);
     if (flags & JV_PRINT_REFCOUNT)
-      put_refcnt(C, refcnt, F, S, flags & JV_PRINT_ISATTY);
+      put_refcnt(C, (int)refcnt, F, S, flags & JV_PRINT_ISATTY);
     break;
   case JV_KIND_ARRAY: {
     if (jv_array_length(jv_copy(x)) == 0) {
@@ -307,7 +309,7 @@ static void jv_dump_term(struct dtoa_context* C, jv x, int flags, int indent, FI
     if (color) put_str(color, F, S, flags & JV_PRINT_ISATTY);
     put_char(']', F, S, flags & JV_PRINT_ISATTY);
     if (flags & JV_PRINT_REFCOUNT)
-      put_refcnt(C, refcnt, F, S, flags & JV_PRINT_ISATTY);
+      put_refcnt(C, (int)refcnt, F, S, flags & JV_PRINT_ISATTY);
     break;
   }
   case JV_KIND_OBJECT: {
@@ -377,7 +379,7 @@ static void jv_dump_term(struct dtoa_context* C, jv x, int flags, int indent, FI
     if (color) put_str(color, F, S, flags & JV_PRINT_ISATTY);
     put_char('}', F, S, flags & JV_PRINT_ISATTY);
     if (flags & JV_PRINT_REFCOUNT)
-      put_refcnt(C, refcnt, F, S, flags & JV_PRINT_ISATTY);
+      put_refcnt(C, (int)refcnt, F, S, flags & JV_PRINT_ISATTY);
   }
   }
   jv_free(x);
@@ -408,7 +410,7 @@ jv jv_dump_string(jv x, int flags) {
   return s;
 }
 
-char *jv_dump_string_trunc(jv x, char *outbuf, size_t bufsize) {
+char *jv_dump_string_trunc(jv x, char *outbuf, ArraySize_t bufsize) {
   assert(bufsize > 0);
   x = jv_dump_string(x, 0);
   const char *str = jv_string_value(x);
