@@ -1279,7 +1279,11 @@ jv jq_get_attr(jq_state *jq, jv attr) {
 }
 
 void jq_dump_disassembly(jq_state *jq, int indent) {
-  dump_disassembly(indent, jq->bc);
+    dump_disassembly(indent, jq->bc);
+}
+
+void jq_write_disassembly(jq_state *jq, Fd_t fd, int indent) {
+    write_disassembly(fd, indent, jq->bc);
 }
 
 void jq_set_input_cb(jq_state *jq, jq_input_cb cb, void *data) {

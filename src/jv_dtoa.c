@@ -190,12 +190,13 @@
 #define NO_ERRNO
 #define NO_HEX_FP
 #define No_Hex_NaN
-#define Long int
 
 #include "jv_dtoa.h"
 
 #include "jv_alloc.h"
 #include "jv.h"
+
+#define Long int
 #define MALLOC jv_mem_alloc
 #define FREE jv_mem_free
 

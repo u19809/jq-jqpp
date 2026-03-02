@@ -1,5 +1,7 @@
 #include "jqpp.h"
 #include <ostream>
+#include <map>
+
 extern "C" {
 #include <jq.h>
 #include <jv.h>
@@ -13,9 +15,14 @@ class JQ::Value_P : public HasPublic<Value> {
             value_ = jv_invalid();
         }
         ~Value_P() {
+            clear();
+        }
+
+        void clear() {
             if (jv_is_valid(value_)) {
                 jv_free(value_);
             }
+            value_ = jv_invalid();
         }
 
         Value_P & operator=(Value_P &&other) noexcept
@@ -42,20 +49,11 @@ class JQ::Value_P : public HasPublic<Value> {
             return *this;
         }
 
-        Value_P & operator=(const jv & other) noexcept {
+        Value_P & operator=(jv other) noexcept {
             if (jv_is_valid(value_)) {
                 jv_free(value_);
             }
             value_ = jv_copy(other);
-            return *this;
-        }
-
-        Value_P & operator=(jv && other) noexcept {
-            if (jv_is_valid(value_)) {
-                jv_free(value_);
-            }
-            value_ = other;
-            other = jv_invalid();
             return *this;
         }
 
@@ -81,16 +79,16 @@ JQ::Value::Value(const Value &other) noexcept : Value()
     (*this) = other;
 }
 
-JQ::Value::Value(const jv &value) noexcept : Value() {
+JQ::Value::Value(jv value) noexcept : Value() {
     (*this) = value;
-}
-
-JQ::Value::Value(jv &&value) noexcept : Value() {
-    (*this) = std::move(value);
 }
 
 JQ::Value::~Value()
 {
+}
+
+void JQ::Value::clear() {
+    prv<Value_P>().clear();
 }
 
 JQ::Value &JQ::Value::operator=(const Value &other)
@@ -105,13 +103,8 @@ JQ::Value &JQ::Value::operator=(Value &&other) noexcept
     return *this;
 }
 
-JQ::Value &JQ::Value::operator=(const jv & other) noexcept {
+JQ::Value &JQ::Value::operator=(jv other)  noexcept {
     prv<Value_P>() = other;
-    return *this;
-}
-
-JQ::Value &JQ::Value::operator=(jv && other)  noexcept {
-    prv<Value_P>() = std::move(other);
     return *this;
 }
 
@@ -175,83 +168,7 @@ std::optional<std::string> JQ::Value::toString() const
     return std::nullopt;
 }
 
-std::optional<JQ::Object> JQ::Value::toObject() const
-{
-    if( prv<Value_P>().assertThat( JV_KIND_OBJECT) ) {
-        Object L;
-        jv_object_foreach(prv<Value_P>().value_, key, val)
-        {
-            L.try_emplace( jv_string_value(key), val );
-        }
-        return L;
-    }
-    return std::nullopt;
-}
-
-std::optional<JQ::ObjectView> JQ::Value::toObjectView() const
-{
-    if( prv<Value_P>().assertThat( JV_KIND_OBJECT) ) {
-        ObjectView L;
-        jv_object_foreach(prv<Value_P>().value_, key, val)
-        {
-            L.try_emplace(jv_string_value(key), val );
-        }
-        return L;
-    }
-    return std::nullopt;
-}
-
-std::optional<JQ::Array> JQ::Value::toArray() const
-{
-    if( prv<Value_P>().assertThat( JV_KIND_ARRAY) ) {
-        Array L;
-        jv_array_foreach(prv<Value_P>().value_, iter, val)
-        {
-            L.emplace_back(val);
-        }
-        return L;
-    }
-    return std::nullopt;
-}
-
-JQ::VariantView JQ::Value::asVariantView() const
-{
-    VariantView V;
-    switch (jv_get_kind(prv<Value_P>().value_)) {
-        case JV_KIND_INVALID:
-            // default std::variant is std::monostate
-            break;
-        case JV_KIND_NULL:
-            V = nullptr;
-            break;
-        case JV_KIND_FALSE:
-            V = true;
-            break;
-        case JV_KIND_TRUE:
-            V = false;
-            break;
-        case JV_KIND_NUMBER:
-            if( jv_is_integer(prv<Value_P>().value_) ) {
-                V = static_cast<int64_t>( jv_number_value(prv<Value_P>().value_) );
-            } else {
-                V = jv_number_value(prv<Value_P>().value_);
-            }
-            break;
-        case JV_KIND_STRING:
-            V = std::move(std::string_view(jv_string_value(prv<Value_P>().value_)));
-            break;
-        case JV_KIND_ARRAY:
-            V = toArray().value();
-            break;
-        case JV_KIND_OBJECT:
-            V = toObjectView().value();
-            break;
-    }
-    return V;
-}
-
-
-JQ::Variant JQ::Value::toVariant() const
+JQ::Variant JQ::Value::toVariant()
 {
     Variant V;
     switch (jv_get_kind(prv<Value_P>().value_)) {
@@ -278,10 +195,20 @@ JQ::Variant JQ::Value::toVariant() const
             V = std::move(std::string(jv_string_value(prv<Value_P>().value_)));
             break;
         case JV_KIND_ARRAY:
-            V = toArray().value();
+            {
+                auto X = as<Array>();
+                if( X ) {
+                    V = *(X.value());
+                }
+            }
             break;
         case JV_KIND_OBJECT:
-            V = toObject().value();
+            {
+                auto X = as<Object>();
+                if( X ) {
+                    V = *(X.value());
+                }
+            }
             break;
     }
     return V;
@@ -358,20 +285,104 @@ class JQ::JQ_P : public HasPublic<JQ> {
         }
 
         jq_state * jq_;
-
+        JQ::MsgCallback_Ft ErrCb = nullptr;
+        void * ErrCbContext = nullptr;
+        JQ::MsgCallback_Ft StderrCb = nullptr;
+        void * StderrCbContext = nullptr;
+        JQ::MsgCallback_Ft DebugCb = nullptr;
+        void * DebugCbContext = nullptr;
 };
 
 JQ::JQ::JQ() : HasPrivate<JQ_P>(new JQ_P( this ))
 {
 }
 
+
+
 JQ::JQ::~JQ()
 {
 }
 
-void JQ::JQ::compile(const std::string &filter)
+void JQ::JQ::setErrorCallback(MsgCallback_Ft Ft, void *Context) {
+    prv<JQ_P>().ErrCb = Ft;
+    prv<JQ_P>().ErrCbContext = Context;
+    if( prv<JQ_P>().ErrCb == nullptr ) {
+        jq_set_error_cb( prv<JQ_P>().jq_, nullptr, nullptr );
+    } else {
+        jq_set_error_cb(
+            prv<JQ_P>().jq_,
+            [](void *data, jv msg) {
+                reinterpret_cast<JQ *>(data)
+                    ->prv<JQ_P>()
+                    .ErrCb(reinterpret_cast<JQ *>(data)->prv<JQ_P>().ErrCbContext, Value(msg));
+                jv_free(msg);
+            },
+            this);
+    }
+}
+
+JQ::JQ::MsgCallback_Ft JQ::JQ::getErrorCallback(void * & Context) {
+    Context = prv<JQ_P>().ErrCbContext;
+    return prv<JQ_P>().ErrCb ;
+}
+
+void JQ::JQ::setStderrCallback(MsgCallback_Ft Ft, void *Context) {
+    prv<JQ_P>().StderrCb = Ft;
+    prv<JQ_P>().StderrCbContext = Context;
+    if( prv<JQ_P>().StderrCb == nullptr ) {
+        jq_set_stderr_cb( prv<JQ_P>().jq_, nullptr, nullptr );
+    } else {
+        jq_set_stderr_cb(
+            prv<JQ_P>().jq_,
+            [](void *data, jv msg) {
+                reinterpret_cast<JQ *>(data)
+                ->prv<JQ_P>()
+                    .StderrCb(reinterpret_cast<JQ *>(data)->prv<JQ_P>().StderrCbContext, Value(msg));
+                jv_free(msg);
+            },
+            this);
+    }
+}
+
+JQ::JQ::MsgCallback_Ft JQ::JQ::getStderrCallback(void * & Context) {
+    Context = prv<JQ_P>().StderrCbContext;
+    return prv<JQ_P>().StderrCb ;
+}
+
+void JQ::JQ::setDebugCallback(MsgCallback_Ft Ft, void *Context) {
+    prv<JQ_P>().DebugCb = Ft;
+    prv<JQ_P>().DebugCbContext = Context;
+    if( prv<JQ_P>().DebugCb == nullptr ) {
+        jq_set_debug_cb( prv<JQ_P>().jq_, nullptr, nullptr );
+    } else {
+        jq_set_debug_cb(
+            prv<JQ_P>().jq_,
+            [](void *data, jv msg) {
+                reinterpret_cast<JQ *>(data)
+                ->prv<JQ_P>()
+                    .DebugCb(reinterpret_cast<JQ *>(data)->prv<JQ_P>().DebugCbContext, Value(msg));
+                jv_free(msg);
+            },
+            this);
+    }
+}
+
+JQ::JQ::MsgCallback_Ft JQ::JQ::getDebugCallback(void * & Context) {
+    Context = prv<JQ_P>().DebugCbContext;
+    return prv<JQ_P>().DebugCb ;
+}
+
+JQ::Value JQ::JQ::getExitCode() {
+    return Value( jq_get_exit_code(prv<JQ_P>().jq_));
+}
+
+JQ::Value JQ::JQ::getErrorMessage() {
+    return Value( jq_get_error_message(prv<JQ_P>().jq_));
+}
+
+void JQ::JQ::compile(const std::string &filter, const Object &Args)
 {
-    if (!jq_compile(prv<JQ_P>().jq_, filter.c_str())) {
+    if (!jq_compile_args(prv<JQ_P>().jq_, filter.c_str(), Args.copy() )) {
         throw Exception("Failed to compile jq filter");
     }
 }
@@ -393,9 +404,82 @@ JQ::Array JQ::JQ::run(const Value &input)
 
     jv output;
     while (jv_is_valid(output = jq_next(prv<JQ_P>().jq_))) {
-        L.emplace_back(output);
+        L.push(output);
     }
 
     return L;
 }
 
+JQ::Array::Array() : Value( jv_array() ){
+
+}
+
+size_t JQ::Array::length() const
+{
+    return size_t(jv_array_length(copy()));
+}
+
+JQ::Value JQ::Array::at(size_t Idx) const
+{
+    return Value{jv_array_get(copy(), ArraySize_t(Idx))};
+}
+
+JQ::Array &JQ::Array::concat(const Array &v) {
+    jv_array_concat( copy(), v.copy() );
+    return *this;
+}
+
+JQ::Array &JQ::Array::concat(Array &&v) {
+    jv_array_concat( copy(), v.copy() );
+    v.clear();
+    return *this;
+}
+
+JQ::Array &JQ::Array::concat(jv v) {
+    jv_array_concat( copy(), jv_copy(v) );
+    return *this;
+}
+
+JQ::Array &JQ::Array::push(const Value &v)
+{
+    jv_array_append(copy(), v.copy());
+    return *this;
+}
+
+
+JQ::Array &JQ::Array::push(Value &&v)
+{
+    jv_array_append(copy(), v.copy());
+    v.clear();
+    return *this;
+}
+
+
+JQ::Array &JQ::Array::push( jv v)
+{
+    jv_array_append(copy(), jv_copy(v));
+    return *this;
+}
+
+JQ::Array &JQ::Array::set(size_t Idx, const Value &v)
+{
+    jv_array_set(copy(), ArraySize_t(Idx), v.copy());
+    return *this;
+}
+
+JQ::Array &JQ::Array::set(size_t Idx, Value && v)
+{
+    jv_array_set(copy(), ArraySize_t(Idx), v.copy());
+    v.clear();
+    return *this;
+}
+
+JQ::Array &JQ::Array::set(size_t Idx, jv v)
+{
+    jv_array_set(copy(), ArraySize_t(Idx), jv_copy(v) );
+    return *this;
+}
+
+JQ::Object::Object() :Value(jv_object()){
+
+}

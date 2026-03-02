@@ -1277,4 +1277,93 @@ find_string(const unsigned char *bp, int *tgt, const char * const *n1,
     /* Nothing matched */
     return NULL;
 }
+
 #endif
+
+
+#include "util.h"
+#include <stdio.h>
+#include <stdarg.h>
+#include <stdlib.h>
+
+#ifdef _WIN32
+#include <malloc.h>   // For _alloca
+#include <windows.h>  // For HANDLE and WriteFile
+#define ALLOCA _alloca
+#else
+#include <alloca.h>   // For alloca
+#include <unistd.h>   // For write()
+#define ALLOCA alloca
+#endif
+
+/**
+ * @brief Formats a string on the stack and writes it to a system-level output.
+ * * This function calculates the required buffer size for a formatted string,
+ * allocates that space on the stack using alloca, and performs a single
+ * write operation to the OS-specific file handle.
+ * * @note This function uses stack allocation. Large formatted strings (e.g., > 64KB)
+ * may cause a stack overflow depending on your OS thread limits.
+ * * @param[in] target is Fd_t which on Windows, a HANDLE (e.g., from GetStdHandle).
+ * On Linux, an integer file descriptor (e.g., STDOUT_FILENO).
+ * @param[in] format A printf-style format string.
+ * @param[in] ...    Variable arguments for the format string.
+ * * @return size_t Number of chars written or 0 if error or format was empty string
+ */
+
+
+#include "util.h"
+
+size_t xprintf(Fd_t target, const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    // 1. Calculate required size
+    // We use a copy because vsnprintf/vscprintf can consume the list
+    va_list args_count;
+    va_copy(args_count, args);
+
+#ifdef _WIN32
+    size_t len = _vscprintf(format, args_count);
+#else
+    size_t len = vsnprintf(NULL, 0, format, args_count);
+#endif
+
+    va_end(args_count);
+
+    // Basic error or empty string check
+    if (len == 0) {
+        va_end(args);
+        return len;
+    }
+
+    // 2. Stack Allocation
+    // The memory is automatically reclaimed when xprintf returns.
+    char* buffer = (char*)ALLOCA(len + 1);
+
+    if (buffer != NULL) {
+        // 3. Format into the stack buffer
+#ifdef _WIN32
+        vsprintf_s(buffer, len + 1, format, args);
+
+        // 4. Windows System Write (32 bit)
+        while( len > 0 ) {
+            DWORD written;
+            if( WriteFile(target, buffer, (DWORD)len, &written, NULL) < 0 ) {
+                return 0;
+            }
+            len -= written;
+        }
+
+#else
+        vsnprintf(buffer, len + 1, format, args);
+
+        // 4. Linux System Write
+        if (write(target, buffer, len) < 0) {
+            return 0;
+        }
+#endif
+    }
+
+    va_end(args);
+    return len;
+}

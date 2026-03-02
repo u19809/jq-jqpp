@@ -3,8 +3,15 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <limits.h>
 #include <stdint.h>
+
+// Fd_t is a OS dependent filedescriptor type
+#ifdef _WIN32
+#include <windows.h>
+typedef HANDLE Fd_t;
+#else
+typedef int Fd_t;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -255,9 +262,11 @@ enum jv_print_flags {
   JV_PRINT_SPACE1   = 512,
   JV_PRINT_SPACE2   = 1024,
 };
+
 #define JV_PRINT_INDENT_FLAGS(n) \
     ((n) < 0 || (n) > 7 ? JV_PRINT_TAB | JV_PRINT_PRETTY : (n) << 8 | JV_PRINT_PRETTY)
 void jv_dumpf(jv, FILE *f, int flags);
+void jv_write(jv, Fd_t fd, int flags);
 void jv_dump(jv, int flags);
 void jv_show(jv, int flags);
 jv jv_dump_string(jv, int flags);

@@ -86,8 +86,12 @@ struct bytecode {
   jv debuginfo;
 };
 
+#include "util.h"
+
 void dump_disassembly(int, struct bytecode* code);
 void dump_operation(struct bytecode* bc, uint16_t* op);
+void write_disassembly(Fd_t fd, int, struct bytecode* code);
+void write_operation(Fd_t fd, struct bytecode* bc, uint16_t* op);
 
 int bytecode_operation_length(uint16_t* codeptr);
 void bytecode_free(struct bytecode* bc);

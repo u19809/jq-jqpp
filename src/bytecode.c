@@ -43,13 +43,13 @@ int bytecode_operation_length(uint16_t *codeptr)
     return length;
 }
 
-static void dump_code(int indent, struct bytecode *bc)
+static void write_code(Fd_t fd, int indent, struct bytecode *bc)
 {
     int pc = 0;
     while (pc < bc->codelen) {
-        printf("%*s", indent, "");
-        dump_operation(bc, bc->code + pc);
-        printf("\n");
+        xprintf(fd, "%*s", indent, "");
+        write_operation(fd, bc, bc->code + pc);
+        xprintf(fd, "\n");
         pc += bytecode_operation_length(bc->code + pc);
     }
 }
@@ -63,26 +63,42 @@ static void symbol_table_free(struct symbol_table *syms)
 
 void dump_disassembly(int indent, struct bytecode *bc)
 {
+#ifdef _WIN32
+    // Retrieve the handle
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    // Check for validity (GetStdHandle returns INVALID_HANDLE_VALUE on failure)
+    if (hStdout == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    write_disassembly( hStdout, indent, bc );
+#else
+    write_disassembly( 0, indent, bc );
+#endif
+}
+
+void write_disassembly(Fd_t fd, int indent, struct bytecode *bc)
+{
     if (bc->nclosures > 0) {
-        printf("%*s[params: ", indent, "");
+        xprintf(fd, "%*s[params: ", indent, "");
         jv params = jv_object_get(jv_copy(bc->debuginfo), jv_string("params"));
         for (int i = 0; i < bc->nclosures; i++) {
             if (i)
-                printf(", ");
+                xprintf(fd, ", ");
             jv name = jv_array_get(jv_copy(params), i);
-            printf("%s", jv_string_value(name));
+            xprintf(fd, "%s", jv_string_value(name));
             jv_free(name);
         }
         jv_free(params);
-        printf("]\n");
+        xprintf(fd, "]\n");
     }
-    dump_code(indent, bc);
+    write_code(fd, indent, bc);
     for (int i = 0; i < bc->nsubfunctions; i++) {
         struct bytecode *subfn = bc->subfunctions[i];
         jv name = jv_object_get(jv_copy(subfn->debuginfo), jv_string("name"));
-        printf("%*s%s:%d:\n", indent, "", jv_string_value(name), i);
+        xprintf(fd, "%*s%s:%d:\n", indent, "", jv_string_value(name), i);
         jv_free(name);
-        dump_disassembly(indent + 2, subfn);
+        write_disassembly(fd, indent + 2, subfn);
     }
 }
 
@@ -97,10 +113,26 @@ static struct bytecode *getlevel(struct bytecode *bc, int level)
 
 void dump_operation(struct bytecode *bc, uint16_t *codeptr)
 {
+#ifdef _WIN32
+    // Retrieve the handle
+    HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    // Check for validity (GetStdHandle returns INVALID_HANDLE_VALUE on failure)
+    if (hStdout == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    write_operation( hStdout, bc, codeptr );
+#else
+    write_operation( 0, bc, codeptr );
+#endif
+}
+
+void write_operation(Fd_t fd, struct bytecode *bc, uint16_t *codeptr)
+{
     int pc = (int) (codeptr - bc->code);
-    printf("%04d ", pc);
+    xprintf( fd, "%04d ", pc);
     const struct opcode_description *op = opcode_describe(bc->code[pc++]);
-    printf("%s", op->name);
+    xprintf( fd, "%s", op->name);
     if (op->length > 1) {
         uint16_t imm = bc->code[pc++];
         if (op->op == CALL_JQ || op->op == TAIL_CALL_JQ) {
@@ -117,34 +149,34 @@ void dump_operation(struct bytecode *bc, uint16_t *codeptr)
                                                       jv_string("params")),
                                         idx);
                 }
-                printf(" %s:%d", jv_string_value(name), idx);
+                xprintf( fd, " %s:%d", jv_string_value(name), idx);
                 jv_free(name);
                 if (level) {
-                    printf("^%d", level);
+                    xprintf( fd, "^%d", level);
                 }
             }
         } else if (op->op == CALL_BUILTIN) {
             int func = bc->code[pc++];
             jv name = jv_array_get(jv_copy(bc->globals->cfunc_names), func);
-            printf(" %s", jv_string_value(name));
+            xprintf( fd, " %s", jv_string_value(name));
             jv_free(name);
         } else if (op->flags & OP_HAS_BRANCH) {
-            printf(" %04d", pc + imm);
+            xprintf( fd, " %04d", pc + imm);
         } else if (op->flags & OP_HAS_CONSTANT) {
-            printf(" ");
-            jv_dump(jv_array_get(jv_copy(bc->constants), imm), 0);
+            xprintf( fd, " ");
+            jv_write(jv_array_get(jv_copy(bc->constants), imm), fd, 0);
         } else if (op->flags & OP_HAS_VARIABLE) {
             uint16_t v = bc->code[pc++];
             jv name = jv_array_get(jv_object_get(jv_copy(getlevel(bc, imm)->debuginfo),
                                                  jv_string("locals")),
                                    v);
-            printf(" $%s:%d", jv_string_value(name), v);
+            xprintf( fd, " $%s:%d", jv_string_value(name), v);
             jv_free(name);
             if (imm) {
-                printf("^%d", imm);
+                xprintf( fd, "^%d", imm);
             }
         } else {
-            printf(" %d", imm);
+            xprintf( fd, " %d", imm);
         }
     }
 }

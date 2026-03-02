@@ -396,6 +396,31 @@ void jv_dump(jv x, int flags) {
   jv_dumpf(x, stdout, flags);
 }
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include <stdio.h>
+#include <windows.h>
+#else
+#include <stdio.h>
+#endif
+
+void jv_write( jv x, Fd_t fd, int flags) {
+
+#ifdef _WIN32
+    int fdesc = _open_osfhandle((intptr_t)fd, _O_TEXT);
+    if (fdesc == -1) {
+        return;
+    }
+
+    // 2. Convert the int descriptor to a FILE*
+    FILE* fp = _fdopen(fdesc, "w");
+#else
+    FILE* fp = fdopen(fd, "w");
+#endif
+    jv_dumpf( x, fp, flags );
+}
+
 /* This one is nice for use in debuggers */
 void jv_show(jv x, int flags) {
   if (flags == -1)

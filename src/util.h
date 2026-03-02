@@ -13,6 +13,8 @@
 
 #include "jv.h"
 
+size_t xprintf(Fd_t target, const char* format, ...);
+
 jv expand_path(jv);
 jv get_home(void);
 jv jq_realpath(jv);
