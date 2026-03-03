@@ -4,9 +4,12 @@
 int main() {
     try {
         JQ::JQ jq;
+
         jq.compile(".name");
 
         JQ::Value data = jq.parse( R"({"name":"Alice","age":30})" );
+
+        jq.trace( true, false );
 
         auto results = jq.run( data );
 

@@ -1265,9 +1265,13 @@ jv jq_get_lib_dirs(jq_state *jq) {
 }
 
 void jq_set_attrs(jq_state *jq, jv attrs) {
-  assert(jv_get_kind(attrs) == JV_KIND_OBJECT);
-  jv_free(jq->attrs);
-  jq->attrs = attrs;
+    assert(jv_get_kind(attrs) == JV_KIND_OBJECT);
+    jv_free(jq->attrs);
+    jq->attrs = attrs;
+}
+
+jv jq_get_attrs(jq_state *jq ) {
+    return jv_copy(jq->attrs);
 }
 
 void jq_set_attr(jq_state *jq, jv attr, jv val) {

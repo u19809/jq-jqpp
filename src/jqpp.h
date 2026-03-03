@@ -60,7 +60,7 @@ namespace JQ
             explicit Value(jv value) noexcept;
             Value(const Value & other) noexcept;
             Value(Value &&other) noexcept;
-            ~Value();
+            virtual ~Value();
 
             void clear();
 
@@ -120,7 +120,7 @@ namespace JQ
             size_t length() const;
 
             Iterator end() {
-                return Iterator{*this,length()-1};
+                return Iterator{*this,length()};
             }
 
             Value operator[]( size_t Idx ) const {
@@ -209,7 +209,7 @@ namespace JQ
     class JQ : private HasPrivate<JQ_P>
     {
         public:
-            using MsgCallback_Ft = void (*)(void *, const Value & V );
+            using MsgCallback_Ft = void (*)(const Value & V );
             enum {
                 JQ_DEBUG_TRACE = 1,
                 JQ_DEBUG_TRACE_DETAIL = 2,
@@ -226,22 +226,33 @@ namespace JQ
             // compile query
             void compile(const std::string &filter, const Object & Args = Object());
 
+            void trace( bool On, bool WithDetail = false );
+
             // compile json expression
             static Value parse(const std::string &json_input);
 
             // execute this string on this expression
-            Array run(const Value & input);
+            Array run(const Value & input );
 
-            void setErrorCallback( MsgCallback_Ft, void * Context );
-            MsgCallback_Ft getErrorCallback( void * & Context );
-            void setStderrCallback(MsgCallback_Ft, void *);
-            MsgCallback_Ft getStderrCallback(void *&);
-            void setDebugCallback(MsgCallback_Ft, void *);
-            MsgCallback_Ft getDebugCallback(void *&);
+            void setErrorCallback( MsgCallback_Ft );
+            MsgCallback_Ft getErrorCallback();
+            void setStderrCallback(MsgCallback_Ft);
+            MsgCallback_Ft getStderrCallback();
+            void setDebugCallback(MsgCallback_Ft);
+            MsgCallback_Ft getDebugCallback();
 
             // void jq_dump_disassembly(jq_state *, int );
             Value getExitCode();
             Value getErrorMessage();
+
+            void setAttributes( const Value & v );
+            Value getAttributes();
+            void setAttribute( const Value & Attr, const Value & Val );
+            Value getAttribute( const Value & Attr );
+
+            Value getJqOrigin();
+            Value getProgOrigin();
+            Value getLibDirs();
 
 #ifdef GONE
 
@@ -249,14 +260,6 @@ namespace JQ
             void jq_set_input_cb(jq_state *,jq_input_cb, void *);
             void jq_get_input_cb(jq_state *, jq_input_cb *, void **);
 
-            void jq_set_attrs(jq_state *, jv);
-            jv jq_get_attrs(jq_state *);
-
-            jv jq_get_jq_origin(jq_state *);
-            jv jq_get_prog_origin(jq_state *);
-            jv jq_get_lib_dirs(jq_state *);
-            void jq_set_attr(jq_state *, jv, jv);
-            jv jq_get_attr(jq_state *, jv);
 #endif
             /*
             // void jq_set_nomem_handler(jq_state *, void (*)(void *), void *);

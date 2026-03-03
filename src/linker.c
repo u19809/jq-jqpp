@@ -291,7 +291,6 @@ static int process_dependencies(jq_state *jq, jv jq_origin, jv lib_origin, block
   for (ArraySize_t i = jv_array_length(jv_copy(deps)); i > 0; ) {
     i--;
     jv dep = jv_array_get(jv_copy(deps), i);
-
     const char *as_str = NULL;
     int is_data = jv_get_kind(jv_object_get(jv_copy(dep), jv_string("is_data"))) == JV_KIND_TRUE;
     int raw = 0;
@@ -319,7 +318,7 @@ static int process_dependencies(jq_state *jq, jv jq_origin, jv lib_origin, block
         jv_free(resolved);
         continue;
       }
-      jv emsg = jv_invalid_get_msg(resolved);
+    jv emsg = jv_invalid_get_msg(resolved);
       jq_report_error(jq, jv_string_fmt("jq: error: %s\n",jv_string_value(emsg)));
       jv_free(emsg);
       jv_free(deps);

@@ -5,6 +5,10 @@
 #include "bytecode.h"
 #include "jv_alloc.h"
 
+#ifndef WIN32
+#include <unistd.h>
+#endif
+
 // flags, length
 #define NONE 0, 1
 #define CONSTANT OP_HAS_CONSTANT, 2
@@ -122,8 +126,10 @@ void dump_operation(struct bytecode *bc, uint16_t *codeptr)
         return;
     }
     write_operation( hStdout, bc, codeptr );
+    FlushFileBuffers( hStdout );
 #else
     write_operation( 0, bc, codeptr );
+    fsync( 0 );
 #endif
 }
 

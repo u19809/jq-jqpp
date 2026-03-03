@@ -303,7 +303,7 @@ pthread_key_create(pthread_key_t *key, void (*dtor)(void *))
     return ret;
 }
 
-static void
+static int
 key_lookup(pthread_key_t key, tls_keys **kd,
            size_t *dtor_idx, void (**dtor)(void *))
 {
@@ -329,7 +329,7 @@ key_lookup(pthread_key_t key, tls_keys **kd,
                 *dtor_idx = key - key_defs->keys_start_idx;
             if (dtor != NULL)
                 *dtor = key_defs->keys_dtors[key - key_defs->keys_start_idx];
-            return;
+            return 1;
         }
 
         pthread_mutex_lock(&tls_key_defs_lock);
@@ -338,6 +338,7 @@ key_lookup(pthread_key_t key, tls_keys **kd,
         assert(key_defs != NULL);
         assert(key >= key_defs->keys_start_idx);
     }
+    return 0; // not found
 }
 
 int
@@ -348,9 +349,9 @@ pthread_setspecific(pthread_key_t key, void *value)
     void (*dtor)(void *);
     size_t i;
 
-    key_lookup(key, NULL, NULL, &dtor);
-    if (dtor == NULL)
+    if( ! key_lookup(key, NULL, NULL, &dtor) ) {
         return EINVAL;
+    }
 
     if (key >= values.values_num) {
         if (values.values_num == 0) {
@@ -370,8 +371,9 @@ pthread_setspecific(pthread_key_t key, void *value)
 
     assert(key < values.values_num);
 
-    if (values.values[key] != NULL && dtor != NULL && dtor != DEAD_KEY)
-        dtor(values.values[key]);
+    // pthread_setspecific does not free values when setting ... only at thread exit
+    // if (values.values[key] != NULL && dtor != NULL && dtor != DEAD_KEY)
+    //     dtor(values.values[key]);
 
     values.values[key] = value;
     return 0;
@@ -1056,7 +1058,7 @@ jv jv_array_set(jv j, ArraySize_t idx, jv val)
         jv_free(val);
         return jv_invalid_with_msg(jv_string("Out of bounds negative array index"));
     }
-    if (idx >= ARRAYSIZE_MAX ) {
+    if (idx >= ARRAYSIZE_MAX ) { // ?? is this correct : orignally (INT_MAX>>2)-jvp_array_offset(j)
         jv_free(j);
         jv_free(val);
         return jv_invalid_with_msg(jv_string("Array index too large"));
